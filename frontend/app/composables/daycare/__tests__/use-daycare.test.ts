@@ -199,6 +199,28 @@ describe("useDaycare setSelectedWeek", () => {
     expect(daycareApi.getShopping).toHaveBeenCalledWith("2026-01-12");
     expect(daycareApi.getInventory).not.toHaveBeenCalled();
   });
+
+  test("marks mutating while the week-scoped refetch is in flight, so the week picker disables and a second navigation is guarded", async () => {
+    resetMocks();
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+
+    let resolveWeek!: (value: ReturnType<typeof ok>) => void;
+    daycareApi.getWeek.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveWeek = resolve;
+      }),
+    );
+
+    const pending = daycare.setSelectedWeek("2026-01-12");
+
+    expect(daycare.mutating.value).toBe(true);
+
+    resolveWeek(ok({ week_start: "2026-01-12" }));
+    await pending;
+
+    expect(daycare.mutating.value).toBe(false);
+  });
 });
 
 describe("useDaycare mutations", () => {
