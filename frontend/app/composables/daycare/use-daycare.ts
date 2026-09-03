@@ -258,18 +258,52 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     );
   }
 
-  async function completeWeek(payload?: CompleteRequest) {
+  /**
+   * `idempotencyKey`, when passed, lets a caller resend the exact same key
+   * on retry so a repeat tap of the same completion intent replays the
+   * stored response instead of attempting a second commit.
+   */
+  async function completeWeek(payload?: CompleteRequest, idempotencyKey?: string) {
     return await runMutation(
-      () => api.daycare.completeWeek(selectedWeek.value, payload),
+      () => api.daycare.completeWeek(
+        selectedWeek.value,
+        payload,
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      ),
       refreshWeekScoped,
     );
   }
 
-  async function undoCompleteWeek() {
+  async function undoCompleteWeek(idempotencyKey?: string) {
     return await runMutation(
-      () => api.daycare.undoCompleteWeek(selectedWeek.value),
+      () => api.daycare.undoCompleteWeek(
+        selectedWeek.value,
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      ),
       refreshWeekScoped,
     );
+  }
+
+  /**
+   * The completion preview is a read: fetched on demand (never on mount)
+   * whenever a caller needs to show what completing the week would do.
+   */
+  async function getCompletionPreview() {
+    const result = await api.daycare.getCompletionPreview(selectedWeek.value);
+    return result.data
+      ? { data: result.data, error: null as DaycareUiError | null }
+      : { data: null, error: mapDaycareError(result.error) };
+  }
+
+  /**
+   * The persisted commit receipt is a read: fetched on demand to view an
+   * already-committed week's receipt without replaying the commit.
+   */
+  async function getCommitReceipt() {
+    const result = await api.daycare.getCommitReceipt(selectedWeek.value);
+    return result.data
+      ? { data: result.data, error: null as DaycareUiError | null }
+      : { data: null, error: mapDaycareError(result.error) };
   }
 
   async function updateSettings(payload: PlannerSettingsUpdate) {
@@ -330,6 +364,8 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     publishShopping,
     completeWeek,
     undoCompleteWeek,
+    getCompletionPreview,
+    getCommitReceipt,
     updateSettings,
     updateRecipeDaycare,
     updateSimpleFood,

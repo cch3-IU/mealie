@@ -54,6 +54,12 @@ describe("DaycareAPI reads", () => {
     expect(requests.get).toHaveBeenNthCalledWith(3, "/api/daycare/v1/weeks/2026-09-07/shopping", undefined, undefined);
   });
 
+  test("getCommitReceipt is a plain read with no Idempotency-Key header", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).getCommitReceipt("2026-09-07");
+    expect(requests.get).toHaveBeenCalledWith("/api/daycare/v1/weeks/2026-09-07/commit-receipt", undefined, undefined);
+  });
+
   test("getRecipeDaycare shapes the recipe slug into the path", async () => {
     const requests = createRequests();
     await new DaycareAPI(requests).getRecipeDaycare("chicken-barley-soup");
@@ -175,5 +181,17 @@ describe("DaycareAPI mutations attach a fresh Idempotency-Key", () => {
     const [, , firstConfig] = vi.mocked(requests.post).mock.calls[0];
     const [, , secondConfig] = vi.mocked(requests.post).mock.calls[1];
     expect(firstConfig?.headers?.["Idempotency-Key"]).not.toEqual(secondConfig?.headers?.["Idempotency-Key"]);
+  });
+
+  test("a caller-supplied Idempotency-Key is preserved rather than overwritten, so a retry can replay", async () => {
+    const requests = createRequests();
+    const api = new DaycareAPI(requests);
+    const key = "11111111-1111-4111-8111-111111111111";
+    await api.completeWeek("2026-09-07", {}, { headers: { "Idempotency-Key": key } });
+    await api.completeWeek("2026-09-07", {}, { headers: { "Idempotency-Key": key } });
+    const [, , firstConfig] = vi.mocked(requests.post).mock.calls[0];
+    const [, , secondConfig] = vi.mocked(requests.post).mock.calls[1];
+    expect(firstConfig?.headers?.["Idempotency-Key"]).toEqual(key);
+    expect(secondConfig?.headers?.["Idempotency-Key"]).toEqual(key);
   });
 });

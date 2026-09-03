@@ -43,6 +43,15 @@
           :error="daycare.prep.error.value ?? (daycare.week.empty.value ? null : daycare.week.error.value)"
           :week-empty="daycare.week.empty.value"
           :group-slug="groupSlug"
+          :week="daycare.week.data.value"
+          :mutating="daycare.mutating.value"
+          :offline="daycare.isOffline.value"
+          :get-completion-preview="daycare.getCompletionPreview"
+          :complete-week="daycare.completeWeek"
+          :get-commit-receipt="daycare.getCommitReceipt"
+          :undo-complete-week="daycare.undoCompleteWeek"
+          @completed="onPrepCompleted"
+          @undone="onPrepUndone"
         />
       </v-col>
       <v-col cols="12">
@@ -143,5 +152,13 @@ async function onShoppingPublish() {
   else {
     alert.success(i18n.t("daycare.shopping.publish"));
   }
+}
+
+function onPrepCompleted() {
+  alert.success(i18n.t("daycare.prep.mark-complete-success"));
+}
+
+function onPrepUndone() {
+  alert.success(i18n.t("daycare.prep.undo-success"));
 }
 </script>
