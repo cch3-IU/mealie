@@ -18,26 +18,6 @@
       </v-card-text>
     </BaseDialog>
 
-    <v-tooltip v-if="!open" location="bottom" color="info">
-      <template #activator="{ props: tooltipProps }">
-        <v-btn
-          icon
-          variant="text"
-          rounded="circle"
-          size="large"
-          color="info"
-          class="ml-1 recipe-exit-btn"
-          v-bind="tooltipProps"
-          :aria-label="$t('general.back-to-recipes')"
-          @click="$emit('exit')"
-        >
-          <v-icon size="x-large">
-            {{ $globals.icons.close }}
-          </v-icon>
-        </v-btn>
-      </template>
-      <span>{{ $t("general.back-to-recipes") }}</span>
-    </v-tooltip>
     <v-spacer />
     <div v-if="!open" class="custom-btn-group ma-1">
       <RecipeFavoriteBadge v-if="loggedIn" color="info" button-style :recipe-id="recipe.id!" show-always />
@@ -98,6 +78,27 @@
         class="ml-1"
         @print="$emit('print')"
       />
+
+      <v-tooltip location="bottom" color="info">
+        <template #activator="{ props: tooltipProps }">
+          <v-btn
+            icon
+            variant="flat"
+            rounded="circle"
+            size="small"
+            color="info"
+            class="ml-1 recipe-exit-btn"
+            v-bind="tooltipProps"
+            :aria-label="$t('general.back-to-recipes')"
+            @click="$emit('exit')"
+          >
+            <v-icon size="x-large">
+              {{ $globals.icons.close }}
+            </v-icon>
+          </v-btn>
+        </template>
+        <span>{{ $t("general.back-to-recipes") }}</span>
+      </v-tooltip>
     </div>
     <div v-if="open" class="custom-btn-group gapped ma-1">
       <v-btn
@@ -202,11 +203,6 @@ function emitDelete() {
 </script>
 
 <style scoped>
-.recipe-exit-btn {
-  min-width: 44px;
-  min-height: 44px;
-}
-
 .custom-btn-group {
   flex: 0, 1, auto;
   display: inline-flex;
