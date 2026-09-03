@@ -58,12 +58,16 @@
       {{ $t("daycare.prep.completion-not-planned") }}
     </p>
 
-    <DaycarePrepReceipt
-      v-else-if="phase === 'receipt' && receipt"
-      :committed-at="receipt.committedAt"
-      :summary="receipt.summary"
-      :recipes="receipt.recipes"
-    />
+    <template v-else-if="phase === 'receipt' && receipt">
+      <v-alert v-if="replayNote" type="info" variant="tonal" density="comfortable" class="mb-2">
+        {{ replayNote }}
+      </v-alert>
+      <DaycarePrepReceipt
+        :committed-at="receipt.committedAt"
+        :summary="receipt.summary"
+        :recipes="receipt.recipes"
+      />
+    </template>
 
     <DaycareErrorState v-else-if="phase === 'error'" :error="errorState" />
   </BaseDialog>
@@ -74,7 +78,7 @@ import DaycareErrorState from "./DaycareErrorState.vue";
 import DaycarePrepReceipt from "./DaycarePrepReceipt.vue";
 import { newIdempotencyKey } from "~/lib/api/user/daycare";
 import type { DaycareUiError } from "~/composables/daycare/use-daycare";
-import type { CommitReceipt, CommitReference, CompleteRequest, CompletionPreview, CompletionPreviewRecipe, CommitReceiptSummary } from "~/lib/api/types/daycare";
+import type { CommitReceipt, CompleteRequest, CompletionPreview, CompletionPreviewRecipe, CommitReceiptSummary } from "~/lib/api/types/daycare";
 
 interface Props {
   modelValue: boolean;
@@ -83,6 +87,7 @@ interface Props {
   committedAt: string | null;
   getCompletionPreview: () => Promise<{ data: CompletionPreview | null; error: DaycareUiError | null }>;
   completeWeek: (payload: CompleteRequest, idempotencyKey: string) => Promise<{ data: CommitReceipt | null; error: DaycareUiError | null }>;
+  getCommitReceipt: () => Promise<{ data: CommitReceipt | null; error: DaycareUiError | null }>;
 }
 const props = defineProps<Props>();
 
@@ -98,6 +103,7 @@ const phase = ref<Phase>("loading");
 const preview = ref<CompletionPreview | null>(null);
 const blockers = ref<string[]>([]);
 const receipt = ref<{ committedAt: string | null; summary: CommitReceiptSummary | null; recipes: CompletionPreviewRecipe[] | null } | null>(null);
+const replayNote = ref<string | null>(null);
 const errorState = ref<DaycareUiError>({ status: null, code: null, message: null, kind: "unknown", details: null });
 
 let idempotencyKey = newIdempotencyKey();
@@ -130,17 +136,24 @@ async function attemptComplete() {
       summary: result.data.summary,
       recipes: result.data.completion_preview?.recipes ?? null,
     };
+    replayNote.value = null;
     phase.value = "receipt";
     emit("completed", result.data);
     return;
   }
   if (result.error?.code === "week_committed") {
-    const commitReference = result.error.details as unknown as CommitReference | null;
-    receipt.value = {
-      committedAt: commitReference?.committed_at ?? props.committedAt,
-      summary: commitReference?.summary ?? null,
-      recipes: null,
-    };
+    // Someone else committed the week between opening the preview and confirming — read
+    // the canonical persisted receipt rather than trusting the error envelope, and make
+    // clear this tap did not itself cause a mutation.
+    const receiptResult = await props.getCommitReceipt();
+    receipt.value = receiptResult.data
+      ? {
+          committedAt: receiptResult.data.committed_at,
+          summary: receiptResult.data.summary,
+          recipes: receiptResult.data.completion_preview?.recipes ?? null,
+        }
+      : { committedAt: props.committedAt, summary: null, recipes: null };
+    replayNote.value = i18n.t("daycare.prep.receipt-already-complete");
     phase.value = "receipt";
     return;
   }
@@ -162,13 +175,38 @@ async function loadPreview() {
   }
 }
 
+async function loadReceipt() {
+  phase.value = "loading";
+  const result = await props.getCommitReceipt();
+  if (result.data) {
+    receipt.value = {
+      committedAt: result.data.committed_at,
+      summary: result.data.summary,
+      recipes: result.data.completion_preview?.recipes ?? null,
+    };
+    replayNote.value = null;
+    phase.value = "receipt";
+    return;
+  }
+  if (result.error?.status === 404 && result.error.code === "receipt_not_found") {
+    receipt.value = { committedAt: props.committedAt, summary: null, recipes: null };
+    replayNote.value = null;
+    phase.value = "receipt";
+    return;
+  }
+  if (result.error) {
+    handleFailure(result.error);
+  }
+}
+
 async function arm() {
   idempotencyKey = newIdempotencyKey();
   preview.value = null;
   receipt.value = null;
+  replayNote.value = null;
   blockers.value = [];
   if (props.committed) {
-    await attemptComplete();
+    await loadReceipt();
   }
   else {
     await loadPreview();

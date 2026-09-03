@@ -1,4 +1,4 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, test, vi } from "vitest";
 import DaycarePrepCard from "./DaycarePrepCard.vue";
 import { vuetifyStubs } from "~/tests/stub-vuetify";
@@ -59,6 +59,7 @@ function mountCard(props: Partial<InstanceType<typeof DaycarePrepCard>["$props"]
       offline: false,
       getCompletionPreview: vi.fn(() => Promise.resolve({ data: null, error: null })),
       completeWeek: vi.fn(() => Promise.resolve({ data: null, error: null })),
+      getCommitReceipt: vi.fn(() => Promise.resolve({ data: null, error: null })),
       undoCompleteWeek: vi.fn(() => Promise.resolve({ data: null, error: null })),
       ...props,
     },
@@ -121,5 +122,54 @@ describe("DaycarePrepCard", () => {
     expect(buttons.some(b => b.text() === "View Receipt")).toBe(true);
     expect(buttons.some(b => b.text() === "Undo")).toBe(true);
     expect(buttons.some(b => b.text() === "Mark Prep Complete")).toBe(false);
+  });
+
+  test("View Receipt reads the persisted receipt via getCommitReceipt and never calls completeWeek", async () => {
+    const completeWeek = vi.fn(() => Promise.resolve({ data: null, error: null }));
+    const getCommitReceipt = vi.fn(() => Promise.resolve({
+      data: { schema_version: 2, week_start: "2026-01-05", made_date: "2026-01-06", committed_at: "2026-01-06T12:00:00Z", summary: { existing_inventory_allocated: 2, leftover_portions_added: 8, leftover_lots_added: 1 } },
+      error: null,
+    }));
+    const wrapper = mountCard({
+      week: weekFixture({ committed: true, committed_at: "2026-01-06T12:00:00Z" }),
+      completeWeek,
+      getCommitReceipt,
+    });
+
+    const viewReceipt = wrapper.findAll("button").find(b => b.text() === "View Receipt")!;
+    await viewReceipt.trigger("click");
+    await flushPromises();
+
+    expect(getCommitReceipt).toHaveBeenCalledTimes(1);
+    expect(completeWeek).not.toHaveBeenCalled();
+  });
+
+  test("disables View Receipt while offline or mutating", () => {
+    const wrapper = mountCard({ week: weekFixture({ committed: true, committed_at: "2026-01-06T12:00:00Z" }), offline: true });
+    const viewReceipt = wrapper.findAll("button").find(b => b.text() === "View Receipt")!;
+    expect(viewReceipt.attributes("disabled")).toBeDefined();
+  });
+
+  test("switching to a different committed week clears a prior sticky undo refusal", async () => {
+    const undoCompleteWeek = vi.fn(() => Promise.resolve({
+      data: null,
+      error: { status: 409, code: "undo_unsafe", message: "Cannot undo.", kind: "conflict" as const, details: null },
+    }));
+    const wrapper = mountCard({
+      week: weekFixture({ committed: true, committed_at: "2026-01-06T12:00:00Z", week_start: "2026-01-05" }),
+      undoCompleteWeek,
+    });
+
+    const undoButton = () => wrapper.findAll("button").find(b => b.text() === "Undo");
+    await undoButton()!.trigger("click");
+    await wrapper.find(".confirm").trigger("click");
+    await flushPromises();
+
+    expect(undoButton()).toBeUndefined();
+
+    await wrapper.setProps({ week: weekFixture({ committed: true, committed_at: "2026-01-13T12:00:00Z", week_start: "2026-01-12" }) });
+    await flushPromises();
+
+    expect(undoButton()).toBeDefined();
   });
 });

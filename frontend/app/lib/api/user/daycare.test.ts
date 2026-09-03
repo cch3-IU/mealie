@@ -54,6 +54,12 @@ describe("DaycareAPI reads", () => {
     expect(requests.get).toHaveBeenNthCalledWith(3, "/api/daycare/v1/weeks/2026-09-07/shopping", undefined, undefined);
   });
 
+  test("getCommitReceipt is a plain read with no Idempotency-Key header", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).getCommitReceipt("2026-09-07");
+    expect(requests.get).toHaveBeenCalledWith("/api/daycare/v1/weeks/2026-09-07/commit-receipt", undefined, undefined);
+  });
+
   test("getRecipeDaycare shapes the recipe slug into the path", async () => {
     const requests = createRequests();
     await new DaycareAPI(requests).getRecipeDaycare("chicken-barley-soup");

@@ -76,4 +76,11 @@ describe("DaycarePrepReceipt", () => {
     const wrapper = mountReceipt({ recipes: null });
     expect(wrapper.find("button").exists()).toBe(false);
   });
+
+  test("shows a detail-unavailable note instead of numeric summary lines when summary is null", () => {
+    const wrapper = mountReceipt({ summary: null });
+    expect(wrapper.text()).toContain("Receipt detail isn't available");
+    expect(wrapper.text()).not.toContain("portions used from what was already in the freezer");
+    expect(wrapper.text()).not.toContain("0 portions used");
+  });
 });

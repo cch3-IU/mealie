@@ -43,6 +43,7 @@ const routes = {
   weekPrep: (week: string) => `${prefix}/weeks/${week}/prep`,
   weekCompletionPreview: (week: string) => `${prefix}/weeks/${week}/completion-preview`,
   weekComplete: (week: string) => `${prefix}/weeks/${week}/complete`,
+  weekCommitReceipt: (week: string) => `${prefix}/weeks/${week}/commit-receipt`,
   weekUndoComplete: (week: string) => `${prefix}/weeks/${week}/undo-complete`,
   weekShopping: (week: string) => `${prefix}/weeks/${week}/shopping`,
   weekShoppingPublish: (week: string) => `${prefix}/weeks/${week}/shopping/publish`,
@@ -167,6 +168,10 @@ export class DaycareAPI extends BaseAPI {
       payload,
       withIdempotencyKey(config),
     );
+  }
+
+  async getCommitReceipt(week: string, config?: AxiosRequestConfig) {
+    return await this.requests.get<CommitReceipt>(routes.weekCommitReceipt(week), undefined, config);
   }
 
   async undoCompleteWeek(week: string, config?: AxiosRequestConfig) {

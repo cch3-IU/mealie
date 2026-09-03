@@ -1261,6 +1261,8 @@
       "completion-preview-leftover-note": "Nothing extra will be saved to the freezer.|{count} portion will be saved to the freezer for later.|{count} portions will be saved to the freezer for later.",
       "completion-not-planned": "This week hasn't been planned yet, so there's nothing to complete.",
       "receipt-title": "Prep Completion Receipt",
+      "receipt-already-complete": "This week's prep was already marked complete.",
+      "receipt-detail-unavailable": "Receipt detail isn't available for this week.",
       "receipt-completed-on": "Completed on {date}",
       "receipt-used-existing": "0 portions used from what was already in the freezer.|1 portion used from what was already in the freezer.|{count} portions used from what was already in the freezer.",
       "receipt-saved-new": "No new portions saved to the freezer.|1 new portion saved to the freezer for later.|{count} new portions saved to the freezer for later.",

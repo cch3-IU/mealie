@@ -3,14 +3,19 @@
     <p v-if="committedAt" class="mb-2">
       {{ $t("daycare.prep.receipt-completed-on", { date: formattedDate }) }}
     </p>
-    <p class="mb-1">
-      {{ $t("daycare.prep.receipt-used-existing", existingAllocated) }}
-    </p>
-    <p class="mb-2">
-      {{ $t("daycare.prep.receipt-saved-new", leftoverAdded) }}
-      <template v-if="leftoverAdded > 0">
-        ({{ $t("daycare.prep.receipt-containers", leftoverLots) }})
-      </template>
+    <template v-if="summary">
+      <p class="mb-1">
+        {{ $t("daycare.prep.receipt-used-existing", existingAllocated) }}
+      </p>
+      <p class="mb-2">
+        {{ $t("daycare.prep.receipt-saved-new", leftoverAdded) }}
+        <template v-if="leftoverAdded > 0">
+          ({{ $t("daycare.prep.receipt-containers", leftoverLots) }})
+        </template>
+      </p>
+    </template>
+    <p v-else class="mb-2 text-medium-emphasis">
+      {{ $t("daycare.prep.receipt-detail-unavailable") }}
     </p>
 
     <template v-if="recipes && recipes.length">

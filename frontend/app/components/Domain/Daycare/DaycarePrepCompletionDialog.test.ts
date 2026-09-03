@@ -60,6 +60,7 @@ function mountDialog(props: Partial<InstanceType<typeof DaycarePrepCompletionDia
       committedAt: null,
       getCompletionPreview: vi.fn(() => Promise.resolve({ data: previewFixture(), error: null })),
       completeWeek: vi.fn(() => Promise.resolve({ data: receiptFixture(), error: null })),
+      getCommitReceipt: vi.fn(() => Promise.resolve({ data: receiptFixture(), error: null })),
       ...props,
     },
     global: { stubs: { ...vuetifyStubs, BaseDialog: BaseDialogStub } },
@@ -130,43 +131,52 @@ describe("DaycarePrepCompletionDialog confirm", () => {
     expect(wrapper.text()).toContain("2 portions used from what was already in the freezer");
   });
 
-  test("a week_committed conflict on confirm still shows the persisted receipt (idempotent in effect)", async () => {
+  test("a week_committed conflict on confirm reads the canonical receipt and never mutates again", async () => {
     const completeWeek = vi.fn(() => Promise.resolve({
       data: null,
-      error: daycareError({
-        status: 409,
-        code: "week_committed",
-        details: { week_start: "2026-01-05", committed_at: "2026-01-06T12:00:00Z", made_date: "2026-01-06", receipt: null, summary: { existing_inventory_allocated: 2, leftover_portions_added: 8, leftover_lots_added: 1 } },
-      }),
+      error: daycareError({ status: 409, code: "week_committed" }),
     }));
-    const wrapper = mountDialog({ completeWeek });
+    const getCommitReceipt = vi.fn(() => Promise.resolve({ data: receiptFixture(), error: null }));
+    const wrapper = mountDialog({ completeWeek, getCommitReceipt });
     await flushPromises();
 
     await wrapper.find(".submit").trigger("click");
     await flushPromises();
 
+    expect(getCommitReceipt).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain("2 portions used from what was already in the freezer");
+    expect(wrapper.text()).toContain("already marked complete");
     expect(wrapper.emitted("completed")).toBeUndefined();
   });
 });
 
 describe("DaycarePrepCompletionDialog for an already-committed week", () => {
-  test("skips the preview step and fetches the persisted receipt instead", async () => {
+  test("skips the preview step and reads the persisted receipt via a GET, never replaying the commit", async () => {
     const getCompletionPreview = vi.fn();
-    const completeWeek = vi.fn(() => Promise.resolve({
-      data: null,
-      error: daycareError({
-        status: 409,
-        code: "week_committed",
-        details: { week_start: "2026-01-05", committed_at: "2026-01-06T12:00:00Z", made_date: "2026-01-06", receipt: null, summary: { existing_inventory_allocated: 2, leftover_portions_added: 8, leftover_lots_added: 1 } },
-      }),
-    }));
-    const wrapper = mountDialog({ committed: true, committedAt: "2026-01-06T12:00:00Z", getCompletionPreview, completeWeek });
+    const completeWeek = vi.fn();
+    const getCommitReceipt = vi.fn(() => Promise.resolve({ data: receiptFixture(), error: null }));
+    const wrapper = mountDialog({ committed: true, committedAt: "2026-01-06T12:00:00Z", getCompletionPreview, completeWeek, getCommitReceipt });
     await flushPromises();
 
     expect(getCompletionPreview).not.toHaveBeenCalled();
-    expect(completeWeek).toHaveBeenCalledTimes(1);
+    expect(completeWeek).not.toHaveBeenCalled();
+    expect(getCommitReceipt).toHaveBeenCalledTimes(1);
     expect(wrapper.text()).toContain("2 portions used from what was already in the freezer");
     expect(wrapper.find(".submit").exists()).toBe(false);
+  });
+
+  test("falls back to a completed-on date and a detail-unavailable note on a 404 receipt_not_found", async () => {
+    const completeWeek = vi.fn();
+    const getCommitReceipt = vi.fn(() => Promise.resolve({
+      data: null,
+      error: daycareError({ status: 404, code: "receipt_not_found" }),
+    }));
+    const wrapper = mountDialog({ committed: true, committedAt: "2026-01-06T12:00:00Z", completeWeek, getCommitReceipt });
+    await flushPromises();
+
+    expect(completeWeek).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain("Completed on");
+    expect(wrapper.text()).toContain("Receipt detail isn't available");
+    expect(wrapper.text()).not.toContain("portions used from what was already in the freezer");
   });
 });

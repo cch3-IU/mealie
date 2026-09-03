@@ -16,6 +16,7 @@ const daycareApi = {
   completeWeek: vi.fn(),
   undoCompleteWeek: vi.fn(),
   getCompletionPreview: vi.fn(),
+  getCommitReceipt: vi.fn(),
   updateSettings: vi.fn(),
 };
 
@@ -356,6 +357,41 @@ describe("useDaycare mutations", () => {
     expect(result.data).toBeNull();
     expect(result.error?.code).toEqual("prep_blocked");
     expect(result.error?.details?.blockers).toEqual(["Batch yield not configured"]);
+  });
+
+  test("getCommitReceipt is a plain read that never refetches other resources", async () => {
+    resetMocks();
+    daycareApi.getCommitReceipt.mockResolvedValue(ok({ week_start: "2026-01-05", committed_at: "2026-01-06T12:00:00Z", summary: { existing_inventory_allocated: 2 } }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getWeek.mockClear();
+
+    const result = await daycare.getCommitReceipt();
+
+    expect(daycareApi.getCommitReceipt).toHaveBeenCalledWith("2026-01-05");
+    expect(result.error).toBeNull();
+    expect(result.data?.week_start).toEqual("2026-01-05");
+    expect(daycareApi.getWeek).not.toHaveBeenCalled();
+  });
+
+  test("getCommitReceipt maps a 404 receipt_not_found", async () => {
+    resetMocks();
+    daycareApi.getCommitReceipt.mockResolvedValue({
+      data: null,
+      error: {
+        response: {
+          status: 404,
+          data: { error: { code: "receipt_not_found", message: "Week 2026-01-05 has no persisted inventory commit receipt." } },
+        },
+      },
+    });
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+
+    const result = await daycare.getCommitReceipt();
+
+    expect(result.data).toBeNull();
+    expect(result.error?.code).toEqual("receipt_not_found");
   });
 
   test("updateSettings requests then refetches settings only", async () => {

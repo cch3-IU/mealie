@@ -295,6 +295,17 @@ export function useDaycare(options: UseDaycareOptions = {}) {
       : { data: null, error: mapDaycareError(result.error) };
   }
 
+  /**
+   * The persisted commit receipt is a read: fetched on demand to view an
+   * already-committed week's receipt without replaying the commit.
+   */
+  async function getCommitReceipt() {
+    const result = await api.daycare.getCommitReceipt(selectedWeek.value);
+    return result.data
+      ? { data: result.data, error: null as DaycareUiError | null }
+      : { data: null, error: mapDaycareError(result.error) };
+  }
+
   async function updateSettings(payload: PlannerSettingsUpdate) {
     return await runMutation(
       () => api.daycare.updateSettings(payload),
@@ -354,6 +365,7 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     completeWeek,
     undoCompleteWeek,
     getCompletionPreview,
+    getCommitReceipt,
     updateSettings,
     updateRecipeDaycare,
     updateSimpleFood,

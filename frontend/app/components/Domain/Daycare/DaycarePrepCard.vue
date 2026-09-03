@@ -38,10 +38,11 @@
           <p class="mt-3 mb-1">
             {{ $t("daycare.prep.completed-on", { date: completedOnText }) }}
           </p>
-          <v-btn variant="text" class="px-0" @click="viewReceiptOpen = true">
+          <v-btn variant="text" class="px-0" :disabled="offline || mutating" @click="completionDialogOpen = true">
             {{ $t("daycare.prep.view-receipt") }}
           </v-btn>
           <DaycarePrepUndoControl
+            :key="week?.week_start ?? 'none'"
             :disabled="offline || mutating"
             :undo-complete-week="undoCompleteWeek"
             @undone="$emit('undone')"
@@ -52,7 +53,7 @@
           class="mt-3"
           :disabled="offline || mutating || blockers.length > 0"
           :loading="mutating"
-          @click="markCompleteOpen = true"
+          @click="completionDialogOpen = true"
         >
           {{ $t("daycare.prep.mark-complete") }}
         </v-btn>
@@ -60,19 +61,14 @@
     </v-card-text>
 
     <DaycarePrepCompletionDialog
-      v-model="markCompleteOpen"
-      :committed="false"
+      :key="week?.week_start ?? 'none'"
+      v-model="completionDialogOpen"
+      :committed="week?.committed ?? false"
       :committed-at="week?.committed_at ?? null"
       :get-completion-preview="getCompletionPreview"
       :complete-week="completeWeek"
+      :get-commit-receipt="getCommitReceipt"
       @completed="$emit('completed', $event)"
-    />
-    <DaycarePrepCompletionDialog
-      v-model="viewReceiptOpen"
-      :committed="true"
-      :committed-at="week?.committed_at ?? null"
-      :get-completion-preview="getCompletionPreview"
-      :complete-week="completeWeek"
     />
   </v-card>
 </template>
@@ -96,6 +92,7 @@ interface Props {
   offline: boolean;
   getCompletionPreview: () => Promise<{ data: CompletionPreview | null; error: DaycareUiError | null }>;
   completeWeek: (payload: CompleteRequest, idempotencyKey: string) => Promise<{ data: CommitReceipt | null; error: DaycareUiError | null }>;
+  getCommitReceipt: () => Promise<{ data: CommitReceipt | null; error: DaycareUiError | null }>;
   undoCompleteWeek: () => Promise<{ data: UndoResult | null; error: DaycareUiError | null }>;
 }
 const props = defineProps<Props>();
@@ -105,8 +102,7 @@ defineEmits<{
   undone: [];
 }>();
 
-const markCompleteOpen = ref(false);
-const viewReceiptOpen = ref(false);
+const completionDialogOpen = ref(false);
 
 const completedOnText = computed(() => (props.week?.committed_at ? new Date(props.week.committed_at).toLocaleString() : ""));
 </script>

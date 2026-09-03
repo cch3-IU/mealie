@@ -48,6 +48,7 @@
           :offline="daycare.isOffline.value"
           :get-completion-preview="daycare.getCompletionPreview"
           :complete-week="daycare.completeWeek"
+          :get-commit-receipt="daycare.getCommitReceipt"
           :undo-complete-week="daycare.undoCompleteWeek"
           @completed="onPrepCompleted"
           @undone="onPrepUndone"
