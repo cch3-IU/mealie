@@ -176,3 +176,7 @@ dev/code-generation/openapi.json
 .task/*
 .dev.env
 frontend/eslint.config.deprecated.js
+
+# Scratch clones used for local e2e rehearsal against the sidecar repo's
+# deploy stack (tests/e2e/daycare/**; overlay/README.md "E2E rehearsal").
+.scratch/

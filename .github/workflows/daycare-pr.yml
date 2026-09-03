@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - daycare
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -43,3 +44,253 @@ jobs:
       - name: Static build 🏗
         run: pnpm generate
         working-directory: "frontend"
+
+  daycare-image-build:
+    name: "Custom Mealie Image Build (no push)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout 🛎
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build custom-mealie image (docker/Dockerfile, not pushed) 🐳
+        uses: docker/build-push-action@v7
+        with:
+          file: ./docker/Dockerfile
+          context: .
+          push: false
+          load: true
+          tags: custom-mealie:daycare-ci
+          build-args: |
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Sanity-check the built image 🔍
+        run: docker image inspect custom-mealie:daycare-ci --format='{{.Id}} {{.Size}} bytes'
+
+  # Manually triggered only — see overlay/README.md "Daycare e2e CI" for why
+  # this cannot run automatically on every PR (it needs a cross-repo checkout
+  # of the private sidecar repository, which this fork's CI has no credentials
+  # for). Run it by hand from the Actions tab (workflow_dispatch) against a
+  # runner that has DAYCARE_SIDECAR_PAT configured, after reading
+  # overlay/README.md's setup steps.
+  daycare-e2e:
+    name: "Daycare E2E (manual)"
+    if: github.event_name == 'workflow_dispatch'
+    needs: daycare-image-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout mealie fork 🛎
+        uses: actions/checkout@v6
+        with:
+          path: mealie
+
+      - name: Checkout sidecar repository 🛎
+        uses: actions/checkout@v6
+        with:
+          repository: cch3-IU/mealie-daycare-processor
+          token: ${{ secrets.DAYCARE_SIDECAR_PAT }}
+          path: mealie-daycare-processor
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Setup node env 🏗
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+          cache-dependency-path: "mealie/**/pnpm-lock.yaml"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build custom-mealie image from this checkout's HEAD 🐳
+        working-directory: mealie
+        run: |
+          docker build --pull=false -f docker/Dockerfile \
+            --build-arg COMMIT="${{ github.sha }}" \
+            -t custom-mealie:v3.25.0-daycare-ci \
+            .
+
+      - name: Build daycare-processor image from the sidecar checkout 🐳
+        working-directory: mealie-daycare-processor
+        run: ./deploy/build-sidecar.sh --allow-dirty
+
+      - name: Prepare throwaway rehearsal stack directory 📁
+        run: |
+          set -euo pipefail
+          R="$GITHUB_WORKSPACE/rehearsal"
+          mkdir -p "$R/data/mealie" "$R/data/daycare" "$R/config/daycare"
+          cp mealie-daycare-processor/deploy/Caddyfile "$R/Caddyfile"
+          cp mealie-daycare-processor/config/defaults/planner.yaml "$R/config/daycare/planner.yaml"
+          cp mealie-daycare-processor/config/defaults/simple_foods.yaml "$R/config/daycare/simple_foods.yaml"
+
+          # overrides.yaml and recipe_settings.yaml are written fresh here
+          # (not copied from config/defaults/*.yaml, which only carry
+          # example entries for recipes this fixture set doesn't have) and
+          # baked in at first boot — never via the API; see overlay/README.md
+          # "Known defect: recipe-daycare writes fail against the
+          # individual-file config bind mount". The stub LLM classifies
+          # every fixture recipe as lunch/main, so at least one recipe needs
+          # a breakfast- and a snack-slot override or weekly regeneration
+          # always fails with "No eligible recipes for breakfast"; the
+          # portions-per-batch settings unblock DaycarePrepCard's Mark Prep
+          # Complete.
+          {
+            echo "version: 1"
+            echo "recipes:"
+            echo "  apple-cinnamon-oat-bites:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        breakfast: [main]"
+            echo "  sunrise-oat-muffins:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        breakfast: [main]"
+            echo "  crunchy-chickpea-trail-mix:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        snack: [main]"
+            echo "  yogurt-parfait-cups:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        snack: [main]"
+          } > "$R/config/daycare/overrides.yaml"
+          {
+            echo "version: 1"
+            echo "recipes:"
+            echo "  apple-cinnamon-oat-bites:"
+            echo "    daycare_portions_per_batch: 12"
+            echo "  crunchy-chickpea-trail-mix:"
+            echo "    daycare_portions_per_batch: 12"
+            echo "  sunrise-oat-muffins:"
+            echo "    daycare_portions_per_batch: 12"
+            echo "  turkey-sweet-potato-skillet:"
+            echo "    daycare_portions_per_batch: 8"
+            echo "  yogurt-parfait-cups:"
+            echo "    daycare_portions_per_batch: 12"
+          } > "$R/config/daycare/recipe_settings.yaml"
+          # planner.yaml's defaults have no top-level "automation" key, so
+          # appending one is safe. auto_publish_meal_plan lets the
+          # dashboard's Regenerate button also publish to Mealie's native
+          # Meal Planner (off by default; there is no UI toggle for it, per
+          # the known defect above).
+          {
+            echo ""
+            echo "automation:"
+            echo "  weekly_planning_enabled: false"
+            echo "  planning_weekday: thursday"
+            echo "  planning_time: \"18:00\""
+            echo "  timezone: UTC"
+            echo "  auto_publish_meal_plan: true"
+            echo "  auto_publish_shopping_list: false"
+          } >> "$R/config/daycare/planner.yaml"
+
+          DAYCARE_TAG=$(grep '^image_tag=' mealie-daycare-processor/deploy/.build-sidecar.digest | cut -d= -f2 | cut -d: -f2)
+          {
+            echo "MEALIE_IMAGE_TAG=v3.25.0-daycare-ci"
+            echo "DAYCARE_IMAGE_TAG=$DAYCARE_TAG"
+            echo "GATEWAY_BIND_PORT=29931"
+            echo "MEALIE_PUID=1000"
+            echo "MEALIE_PGID=1000"
+            echo "MEALIE_TZ=UTC"
+            echo "MEALIE_BASE_URL=http://127.0.0.1:29931/"
+          } > "$R/.env"
+          {
+            echo "MEALIE_TOKEN="
+            echo "LLM_PROVIDER=stub"
+            echo "LLM_API_KEY="
+            echo "LLM_MODEL="
+            echo "LLM_BASE_URL="
+            echo "PROCESSOR_WRITE_ENABLED=true"
+          } > "$R/daycare.env"
+
+      - name: Bring up the rehearsal stack 🚀
+        working-directory: mealie-daycare-processor
+        run: |
+          docker compose -f deploy/compose.yaml -f deploy/compose.rehearsal.yaml \
+            -p mealie-daycare-e2e-ci \
+            --project-directory "$GITHUB_WORKSPACE/rehearsal" \
+            --env-file "$GITHUB_WORKSPACE/rehearsal/.env" \
+            up -d
+          docker compose -f deploy/compose.yaml -f deploy/compose.rehearsal.yaml \
+            -p mealie-daycare-e2e-ci \
+            --project-directory "$GITHUB_WORKSPACE/rehearsal" \
+            --env-file "$GITHUB_WORKSPACE/rehearsal/.env" \
+            ps
+
+      - name: Mint sidecar Mealie token, seed, and process fixtures 🌱
+        working-directory: mealie-daycare-processor
+        run: |
+          set -euo pipefail
+          MEALIE_URL="http://127.0.0.1:29931"
+          LOGIN_TOKEN=$(curl -fsS -X POST "$MEALIE_URL/api/auth/token" \
+            --data-urlencode "username=changeme@example.com" \
+            --data-urlencode "password=MyPassword" | jq -r '.access_token')
+          API_TOKEN=$(curl -fsS -X POST "$MEALIE_URL/api/users/api-tokens" \
+            -H "Authorization: Bearer $LOGIN_TOKEN" -H "Content-Type: application/json" \
+            -d '{"name":"daycare-e2e-ci-sidecar"}' | jq -r '.token')
+          sed -i "s#^MEALIE_TOKEN=.*#MEALIE_TOKEN=$API_TOKEN#" "$GITHUB_WORKSPACE/rehearsal/daycare.env"
+          docker compose -f deploy/compose.yaml -f deploy/compose.rehearsal.yaml \
+            -p mealie-daycare-e2e-ci \
+            --project-directory "$GITHUB_WORKSPACE/rehearsal" \
+            --env-file "$GITHUB_WORKSPACE/rehearsal/.env" \
+            up -d daycare-processor
+          cd dev/staging
+          MEALIE_URL="$MEALIE_URL" ./seed.sh
+          cd -
+          # First poll enqueues the 11 freshly-imported recipes; the sidecar
+          # debounces newly-changed recipes for `quiet_seconds` (120s
+          # default) before it will actually process them, so a second poll
+          # is needed after waiting that out (docs/OPERATIONS.md §8) — this
+          # exact two-call sequence was verified against a live rehearsal
+          # stack for this lane.
+          UUID1=$(python3 -c "import uuid; print(uuid.uuid4())")
+          curl -fsS -X POST "$MEALIE_URL/api/daycare/v1/processing/poll" \
+            -H "Authorization: Bearer $LOGIN_TOKEN" -H "Content-Type: application/json" -H "Idempotency-Key: $UUID1" \
+            -d '{"full": true, "wait": true}' >/dev/null
+          sleep 125
+          UUID2=$(python3 -c "import uuid; print(uuid.uuid4())")
+          curl -fsS -X POST "$MEALIE_URL/api/daycare/v1/processing/poll" \
+            -H "Authorization: Bearer $LOGIN_TOKEN" -H "Content-Type: application/json" -H "Idempotency-Key: $UUID2" \
+            -d '{"full": false, "wait": true}' >/dev/null
+
+      - name: Install e2e dependencies 📦
+        working-directory: mealie/tests/e2e
+        run: pnpm install
+
+      - name: Install Playwright browsers 🌐
+        working-directory: mealie/tests/e2e
+        run: pnpm playwright install --with-deps chromium webkit
+
+      - name: Run daycare e2e suite 🧪
+        working-directory: mealie/tests/e2e
+        env:
+          DAYCARE_BASE_URL: "http://127.0.0.1:29931"
+        run: pnpm playwright test --project="Daycare Mobile Safari" --project="Daycare Desktop Chrome"
+
+      - name: Upload Playwright report 📎
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: daycare-e2e-report
+          path: mealie/tests/e2e/playwright-report
+          retention-days: 14
+
+      - name: Tear down rehearsal stack 🧹
+        if: always()
+        working-directory: mealie-daycare-processor
+        run: |
+          docker compose -f deploy/compose.yaml -f deploy/compose.rehearsal.yaml \
+            -p mealie-daycare-e2e-ci \
+            --project-directory "$GITHUB_WORKSPACE/rehearsal" \
+            --env-file "$GITHUB_WORKSPACE/rehearsal/.env" \
+            down --volumes

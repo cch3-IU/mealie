@@ -66,6 +66,35 @@ export default defineConfig({
     //   name: 'Google Chrome',
     //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     // },
+
+    /*
+     * Daycare overlay specs (tests/e2e/daycare/**, overlay/README.md).
+     * Scoped to these two projects only via testDir + testMatch, and kept
+     * out of chromium/firefox/webkit above (which are left untouched) by
+     * naming these specs "*.dc-spec.ts" instead of the default "*.spec.ts"
+     * glob those projects match. Run against a real daycare-stack gateway
+     * (deploy/compose.yaml + compose.rehearsal.yaml in the sidecar repo,
+     * never dev/staging directly, never production) — set DAYCARE_BASE_URL
+     * to that gateway's loopback URL before running.
+     */
+    {
+      name: 'Daycare Mobile Safari',
+      testDir: './daycare',
+      testMatch: /.*\.dc-spec\.ts/,
+      use: {
+        ...devices['iPhone 14'],
+        baseURL: process.env.DAYCARE_BASE_URL || 'http://127.0.0.1:19926',
+      },
+    },
+    {
+      name: 'Daycare Desktop Chrome',
+      testDir: './daycare',
+      testMatch: /.*\.dc-spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.DAYCARE_BASE_URL || 'http://127.0.0.1:19926',
+      },
+    },
   ],
 
   /* Run your local dev server before starting the tests */
