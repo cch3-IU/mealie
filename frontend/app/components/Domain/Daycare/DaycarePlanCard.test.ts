@@ -101,9 +101,10 @@ describe("DaycarePlanCard", () => {
     expect(wrapper.text()).toContain("PM Snack: Yogurt Cup");
   });
 
-  test("shows a warning banner for a committed week", () => {
-    const wrapper = mountCard({ week: weekFixture({ committed: true }) });
-    expect(wrapper.text()).toContain("This week has been marked complete.");
+  test("shows a locked notice with the commit date for a committed week", () => {
+    const wrapper = mountCard({ week: weekFixture({ committed: true, committed_at: "2026-01-06T12:00:00Z" }) });
+    expect(wrapper.text()).toContain("This week is completed and locked.");
+    expect(wrapper.text()).toContain(new Date("2026-01-06T12:00:00Z").toLocaleString());
   });
 
   test("shows a warning banner for a stale plan with its reason", () => {

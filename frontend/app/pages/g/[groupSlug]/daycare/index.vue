@@ -57,11 +57,13 @@
       <v-col cols="12">
         <DaycareShoppingCard
           :shopping="daycare.shopping.data.value"
+          :week="daycare.week.data.value"
           :week-empty="daycare.shopping.empty.value"
           :loading="daycare.shopping.loading.value"
           :error="daycare.shopping.error.value"
           :mutating="daycare.mutating.value"
           :offline="daycare.isOffline.value"
+          :group-slug="groupSlug"
           @preview="onShoppingPreview"
           @publish="onShoppingPublish"
         />
@@ -78,6 +80,7 @@
           :status="daycare.status.data.value"
           :processing="daycare.processing.data.value"
           :week="daycare.week.data.value"
+          :group-slug="groupSlug"
           :loading="daycare.status.loading.value || daycare.processing.loading.value"
           :error="daycare.status.error.value ?? daycare.processing.error.value"
         />
@@ -119,6 +122,11 @@ function errorMessage(error: { message: string | null; kind: string }) {
   return error.message ?? i18n.t(`daycare.errors.${error.kind}`);
 }
 
+/** `shopping_blocked` and `week_committed` are shown inline by DaycareShoppingCard's own calm, non-error state — a red toast on top would contradict that. */
+function isHandledInlineByShoppingCard(error: { code: string | null }) {
+  return error.code === "shopping_blocked" || error.code === "week_committed";
+}
+
 async function onWeekChange(week: string) {
   await daycare.setSelectedWeek(week);
 }
@@ -136,21 +144,34 @@ async function onRegenerate() {
 async function onShoppingPreview() {
   const result = await daycare.publishShopping({ dry_run: true });
   if (result.error) {
-    alert.error(errorMessage(result.error));
+    if (!isHandledInlineByShoppingCard(result.error)) alert.error(errorMessage(result.error));
   }
   else if (result.data) {
     const { created, updated, deleted } = result.data.counts;
-    alert.info(`${created} created, ${updated} updated, ${deleted} deleted`, i18n.t("daycare.shopping.preview-title"));
+    alert.info(
+      i18n.t("daycare.shopping.preview-result", { created, updated, deleted }),
+      i18n.t("daycare.shopping.preview-title"),
+      { action: { onClick: onShoppingPublish, message: i18n.t("daycare.shopping.publish") } },
+    );
   }
 }
 
 async function onShoppingPublish() {
   const result = await daycare.publishShopping({ dry_run: false });
   if (result.error) {
-    alert.error(errorMessage(result.error));
+    if (!isHandledInlineByShoppingCard(result.error)) alert.error(errorMessage(result.error));
   }
-  else {
-    alert.success(i18n.t("daycare.shopping.publish"));
+  else if (result.data) {
+    // The shopping resource is already refetched by publishShopping's own request-then-refetch;
+    // the week is reloaded too so anything week-scoped that reads publication state stays in sync.
+    await daycare.week.load();
+    const { created, updated, deleted } = result.data.counts;
+    const listId = result.data.list_id;
+    alert.success(
+      i18n.t("daycare.shopping.publish-result", { created, updated, deleted }),
+      i18n.t("daycare.shopping.publish"),
+      listId ? { action: { onClick: () => navigateTo(`/shopping-lists/${listId}`), message: i18n.t("daycare.shopping.open-shopping-list") } } : undefined,
+    );
   }
 }
 

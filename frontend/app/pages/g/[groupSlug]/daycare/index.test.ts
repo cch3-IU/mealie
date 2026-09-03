@@ -1,13 +1,15 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { reactive } from "vue";
 import DaycarePage from "./index.vue";
+import { toastAlert } from "~/composables/use-toast";
 import { vuetifyStubs } from "~/tests/stub-vuetify";
 
 const refresh = vi.fn();
 const setSelectedWeek = vi.fn();
 const regenerateWeek = vi.fn();
 const publishShopping = vi.fn();
+const weekLoad = vi.fn();
 
 function daycareStateFixture() {
   return {
@@ -18,7 +20,7 @@ function daycareStateFixture() {
     setSelectedWeek,
     status: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     settings: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
-    week: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
+    week: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false }, load: weekLoad },
     prep: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     shopping: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     inventory: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
@@ -119,5 +121,65 @@ describe("Daycare dashboard page", () => {
 
     await wrapper.findComponent({ name: "ShoppingCardStub" }).vm.$emit("publish");
     expect(publishShopping).toHaveBeenCalledWith({ dry_run: false });
+  });
+
+  test("passes the current week and group slug to the shopping and status cards", () => {
+    daycareState.week.data.value = { week_start: "2026-01-05" };
+    const wrapper = mountPage();
+
+    expect(wrapper.findComponent({ name: "ShoppingCardStub" }).props("week")).toEqual({ week_start: "2026-01-05" });
+    expect(wrapper.findComponent({ name: "ShoppingCardStub" }).props("groupSlug")).toEqual("family");
+    expect(wrapper.findComponent({ name: "StatusCardStub" }).props("groupSlug")).toEqual("family");
+  });
+
+  test("does not toast a shopping_blocked or week_committed publish error, since the shopping card shows it inline", async () => {
+    toastAlert.open = false;
+    publishShopping.mockResolvedValue({ data: null, error: { status: 409, code: "shopping_blocked", message: "blocked", kind: "conflict", details: null } });
+    const wrapper = mountPage();
+
+    await wrapper.findComponent({ name: "ShoppingCardStub" }).vm.$emit("publish");
+
+    expect(toastAlert.open).toBe(false);
+  });
+
+  test("still toasts a publish error the shopping card doesn't handle inline", async () => {
+    toastAlert.open = false;
+    publishShopping.mockResolvedValue({ data: null, error: { status: 503, code: "mealie_unavailable", message: "Mealie is unavailable.", kind: "unreachable", details: null } });
+    const wrapper = mountPage();
+
+    await wrapper.findComponent({ name: "ShoppingCardStub" }).vm.$emit("publish");
+
+    expect(toastAlert.open).toBe(true);
+    expect(toastAlert.text).toEqual("Mealie is unavailable.");
+  });
+
+  test("the preview toast is unmistakably a preview, states nothing changed yet, and offers a Publish call to action", async () => {
+    toastAlert.open = false;
+    publishShopping.mockResolvedValue({ data: { counts: { created: 6, updated: 0, deleted: 0 } }, error: null });
+    const wrapper = mountPage();
+
+    await wrapper.findComponent({ name: "ShoppingCardStub" }).vm.$emit("preview");
+
+    expect(toastAlert.color).toEqual("info");
+    expect(toastAlert.text).toContain("Preview only");
+    expect(toastAlert.text).toContain("add 6");
+    expect(toastAlert.text).toContain("Nothing has been changed in Mealie yet.");
+    expect(toastAlert.action?.message).toEqual("Publish");
+    expect(typeof toastAlert.action?.onClick).toEqual("function");
+  });
+
+  test("a real publish refetches the week and shows the actual counts with a link to the list", async () => {
+    toastAlert.open = false;
+    publishShopping.mockResolvedValue({ data: { counts: { created: 6, updated: 1, deleted: 0 }, list_id: "list-42" }, error: null });
+    const wrapper = mountPage();
+
+    await wrapper.findComponent({ name: "ShoppingCardStub" }).vm.$emit("publish");
+    await flushPromises();
+
+    expect(weekLoad).toHaveBeenCalled();
+    expect(toastAlert.color).toEqual("success");
+    expect(toastAlert.text).toContain("6 added");
+    expect(toastAlert.text).toContain("1 updated");
+    expect(toastAlert.action?.message).toEqual("Open Shopping List");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { mapDaycareError, nextWeekStart, useDaycare } from "../use-daycare";
+import { committedAtFromError, mapDaycareError, nextWeekStart, shoppingBlockers, useDaycare } from "../use-daycare";
 
 const daycareApi = {
   getStatus: vi.fn(),
@@ -102,6 +102,30 @@ describe("mapDaycareError", () => {
     const mapped = mapDaycareError(error);
     expect(mapped.code).toEqual("week_committed");
     expect(mapped.message).toEqual("That week is already committed.");
+  });
+});
+
+describe("shoppingBlockers", () => {
+  test("returns an empty list for anything other than a shopping_blocked error", () => {
+    expect(shoppingBlockers(null)).toEqual([]);
+    expect(shoppingBlockers({ status: 409, code: "week_committed", message: null, kind: "conflict", details: { blockers: ["x"] } })).toEqual([]);
+  });
+
+  test("reads the blockers detail off a shopping_blocked error", () => {
+    const error = { status: 409, code: "shopping_blocked", message: "m", kind: "conflict" as const, details: { blockers: ["Sweet Potato & Apple Biscuits: batch size is not calibrated"] } };
+    expect(shoppingBlockers(error)).toEqual(["Sweet Potato & Apple Biscuits: batch size is not calibrated"]);
+  });
+});
+
+describe("committedAtFromError", () => {
+  test("returns null for anything other than a week_committed error", () => {
+    expect(committedAtFromError(null)).toBeNull();
+    expect(committedAtFromError({ status: 409, code: "shopping_blocked", message: null, kind: "conflict", details: { committed_at: "2026-01-06T00:00:00Z" } })).toBeNull();
+  });
+
+  test("reads the committed_at detail off a week_committed error", () => {
+    const error = { status: 409, code: "week_committed", message: "m", kind: "conflict" as const, details: { committed_at: "2026-01-06T00:00:00Z" } };
+    expect(committedAtFromError(error)).toEqual("2026-01-06T00:00:00Z");
   });
 });
 

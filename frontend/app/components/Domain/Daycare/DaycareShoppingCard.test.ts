@@ -2,7 +2,42 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, test } from "vitest";
 import DaycareShoppingCard from "./DaycareShoppingCard.vue";
 import { vuetifyStubs } from "~/tests/stub-vuetify";
-import type { ShoppingPlan } from "~/lib/api/types/daycare";
+import type { ProductionRow, ShoppingPlan, WeekResponse } from "~/lib/api/types/daycare";
+
+function productionRow(overrides: Partial<ProductionRow> = {}): ProductionRow {
+  return {
+    recipe_slug: "sweet-potato-apple-biscuits",
+    recipe_name: "Sweet Potato & Apple Biscuits",
+    demand_daycare_portions: 10,
+    inventory_available: 0,
+    shortage_daycare_portions: 10,
+    batchable: true,
+    daycare_portions_per_batch: null,
+    batches_to_make: null,
+    yield_needs_configuration: true,
+    ...overrides,
+  };
+}
+
+function weekFixture(overrides: Partial<WeekResponse> = {}): WeekResponse {
+  return {
+    week_start: "2026-01-05",
+    generated_at: "2026-01-01T00:00:00Z",
+    schema_version: 1,
+    committed: false,
+    committed_at: null,
+    stale: false,
+    stale_reason: null,
+    reservation_status: "active",
+    reservation: { total_reserved: 0, recipe_daycare_portions: {} },
+    downstream_reservations_invalidated: [],
+    warnings: [],
+    artifacts: {},
+    publication: { status: "never", last_published_at: null, plan_id: "p1", published_plan_id: null, entry_count: 0, drift: false, drift_reason: null, receipt: null },
+    plan: { schema_version: 1, week_start: "2026-01-05", generated_at: "2026-01-01T00:00:00Z", plan_id: "p1", days: [], production_plan: [productionRow()], warnings: [] },
+    ...overrides,
+  };
+}
 
 function shoppingFixture(overrides: Partial<ShoppingPlan> = {}): ShoppingPlan {
   return {
@@ -32,11 +67,13 @@ function mountCard(props: Partial<InstanceType<typeof DaycareShoppingCard>["$pro
   return mount(DaycareShoppingCard, {
     props: {
       shopping: null,
+      week: null,
       weekEmpty: false,
       loading: false,
       error: null,
       mutating: false,
       offline: false,
+      groupSlug: "family",
       ...props,
     },
     global: { stubs: vuetifyStubs },
@@ -84,6 +121,22 @@ describe("DaycareShoppingCard", () => {
     expect(wrapper.html()).not.toContain("/shopping-lists/");
   });
 
+  test("plainly states the shopping list hasn't been published yet", () => {
+    const wrapper = mountCard({ shopping: shoppingFixture() });
+    expect(wrapper.text()).toContain("Not published yet.");
+  });
+
+  test("publish is the primary (filled) action and preview the secondary text action", () => {
+    const wrapper = mountCard({ shopping: shoppingFixture() });
+    const buttons = wrapper.findAll("button");
+    const preview = buttons.find(b => b.text().includes("Preview"))!;
+    const publish = buttons.find(b => b.text() === "Publish")!;
+    // VBtn's stub only wires up `disabled`/`loading` as declared props; `variant="text"` falls through
+    // as a plain attribute — a filled (primary) v-btn never sets it at all.
+    expect(preview.attributes("variant")).toEqual("text");
+    expect(publish.attributes("variant")).toBeUndefined();
+  });
+
   test("emits preview and publish separately", async () => {
     const wrapper = mountCard({ shopping: shoppingFixture() });
     const buttons = wrapper.findAll("button");
@@ -103,5 +156,74 @@ describe("DaycareShoppingCard", () => {
     wrapper.findAll("button").forEach((button) => {
       expect(button.attributes("disabled")).toBeDefined();
     });
+  });
+
+  test("shows the blocked state with a linked blocker and a hint instead of a raw error, and disables actions", () => {
+    const wrapper = mountCard({
+      week: weekFixture(),
+      error: {
+        status: 409,
+        code: "shopping_blocked",
+        message: "Shopping plan cannot be complete until batch sizing is calibrated.",
+        kind: "conflict",
+        details: { blockers: ["Sweet Potato & Apple Biscuits: batch size is not calibrated"] },
+      },
+    });
+
+    expect(wrapper.text()).toContain("Shopping needs one more thing");
+    expect(wrapper.text()).toContain("Sweet Potato & Apple Biscuits");
+    expect(wrapper.text()).toContain("batch size is not calibrated");
+    expect(wrapper.html()).toContain("/g/family/r/sweet-potato-apple-biscuits");
+    expect(wrapper.text()).toContain("daycare portions per batch");
+    expect(wrapper.find("[data-type='error']").exists()).toBe(false);
+
+    const buttons = wrapper.findAll("button");
+    const preview = buttons.find(b => b.text().includes("Preview"))!;
+    const publish = buttons.find(b => b.text() === "Publish")!;
+    expect(preview.attributes("disabled")).toBeDefined();
+    expect(publish.attributes("disabled")).toBeDefined();
+  });
+
+  test("falls back to plain text for a blocker that can't be resolved to a recipe in this week's plan", () => {
+    const wrapper = mountCard({
+      week: weekFixture({ plan: { ...weekFixture().plan, production_plan: [] } }),
+      error: {
+        status: 409,
+        code: "shopping_blocked",
+        message: "Shopping plan cannot be complete until batch sizing is calibrated.",
+        kind: "conflict",
+        details: { blockers: ["Sweet Potato & Apple Biscuits: batch size is not calibrated"] },
+      },
+    });
+
+    expect(wrapper.text()).toContain("Sweet Potato & Apple Biscuits");
+    expect(wrapper.html()).not.toContain("/g/family/r/");
+  });
+
+  test("shows a locked notice with the commit date for a committed week, and hides publish actions", () => {
+    const wrapper = mountCard({
+      shopping: shoppingFixture(),
+      week: weekFixture({ committed: true, committed_at: "2026-01-06T12:00:00Z" }),
+    });
+
+    expect(wrapper.text()).toContain("This week is completed and locked.");
+    expect(wrapper.text()).toContain(new Date("2026-01-06T12:00:00Z").toLocaleString());
+    expect(wrapper.findAll("button")).toHaveLength(0);
+  });
+
+  test("treats a week_committed publish error the same as a locked week when the week prop hasn't caught up yet", () => {
+    const wrapper = mountCard({
+      shopping: shoppingFixture(),
+      error: {
+        status: 409,
+        code: "week_committed",
+        message: "Week is already committed.",
+        kind: "conflict",
+        details: { committed_at: "2026-01-06T12:00:00Z" },
+      },
+    });
+
+    expect(wrapper.text()).toContain("This week is completed and locked.");
+    expect(wrapper.findAll("button")).toHaveLength(0);
   });
 });

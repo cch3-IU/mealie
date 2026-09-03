@@ -67,6 +67,20 @@ export function mapDaycareError(error: unknown): DaycareUiError {
   return { status, code: detail?.code ?? null, message: detail?.message ?? null, kind, details: detail?.details ?? null };
 }
 
+/** The per-recipe blockers on a 409 `shopping_blocked` response (e.g. "Sweet Potato & Apple Biscuits: batch size is not calibrated"), if any. */
+export function shoppingBlockers(error: DaycareUiError | null): string[] {
+  if (!error || error.code !== "shopping_blocked") return [];
+  const blockers = error.details?.blockers;
+  return Array.isArray(blockers) ? blockers.filter((b): b is string => typeof b === "string") : [];
+}
+
+/** The commit timestamp on a 409 `week_committed` response, if any (mirrors `WeekResponse.committed_at`). */
+export function committedAtFromError(error: DaycareUiError | null): string | null {
+  if (!error || error.code !== "week_committed") return null;
+  const committedAt = error.details?.committed_at;
+  return typeof committedAt === "string" ? committedAt : null;
+}
+
 const WEEKDAY_ORDER: Weekday[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const JS_DAY_TO_WEEKDAY: Weekday[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
