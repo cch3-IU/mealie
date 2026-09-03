@@ -18,6 +18,26 @@
       </v-card-text>
     </BaseDialog>
 
+    <v-tooltip v-if="!open" location="bottom" color="info">
+      <template #activator="{ props: tooltipProps }">
+        <v-btn
+          icon
+          variant="text"
+          rounded="circle"
+          size="large"
+          color="info"
+          class="ml-1 recipe-exit-btn"
+          v-bind="tooltipProps"
+          :aria-label="$t('general.back-to-recipes')"
+          @click="$emit('exit')"
+        >
+          <v-icon size="x-large">
+            {{ $globals.icons.close }}
+          </v-icon>
+        </v-btn>
+      </template>
+      <span>{{ $t("general.back-to-recipes") }}</span>
+    </v-tooltip>
     <v-spacer />
     <div v-if="!open" class="custom-btn-group ma-1">
       <RecipeFavoriteBadge v-if="loggedIn" color="info" button-style :recipe-id="recipe.id!" show-always />
@@ -126,7 +146,7 @@ withDefaults(defineProps<Props>(), {
   canEdit: false,
 });
 
-const emit = defineEmits(["print", "input", "save", "delete", "close", "json", "edit"]);
+const emit = defineEmits(["print", "input", "save", "delete", "close", "json", "edit", "exit"]);
 
 const deleteDialog = ref(false);
 
@@ -182,6 +202,11 @@ function emitDelete() {
 </script>
 
 <style scoped>
+.recipe-exit-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
 .custom-btn-group {
   flex: 0, 1, auto;
   display: inline-flex;
