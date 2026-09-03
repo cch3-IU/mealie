@@ -26,6 +26,10 @@ export const vuetifyStubs = {
   },
   VDivider: { template: "<hr>" },
   VExpandTransition: { template: "<div><slot /></div>" },
+  VForm: {
+    emits: ["submit"],
+    template: "<form @submit.prevent=\"$emit('submit')\"><slot /></form>",
+  },
   VIcon: { template: "<span class=\"v-icon\"><slot /></span>" },
   VList: { template: "<div><slot /></div>" },
   VListItem: { template: "<div class=\"v-list-item\"><slot /><slot name=\"append\" /></div>" },
@@ -38,17 +42,17 @@ export const vuetifyStubs = {
   VSwitch: {
     props: ["modelValue"],
     emits: ["update:modelValue"],
-    template: "<input type=\"checkbox\" :checked=\"modelValue\" @change=\"$emit('update:modelValue', ($event.target as HTMLInputElement).checked)\">",
+    template: "<input type=\"checkbox\" :checked=\"modelValue\" @change=\"$emit('update:modelValue', $event.target.checked)\">",
   },
   VTextField: {
     props: ["modelValue"],
     emits: ["update:modelValue"],
-    template: "<input :value=\"modelValue\" @input=\"$emit('update:modelValue', ($event.target as HTMLInputElement).value)\">",
+    template: "<input :value=\"modelValue\" @input=\"$emit('update:modelValue', $event.target.value)\">",
   },
   VSelect: {
     props: ["modelValue", "items"],
     emits: ["update:modelValue"],
-    template: "<select :value=\"modelValue\" @change=\"$emit('update:modelValue', ($event.target as HTMLSelectElement).value)\"><option v-for=\"item in items\" :key=\"item\" :value=\"item\">{{ item }}</option></select>",
+    template: "<select :value=\"modelValue\" @change=\"$emit('update:modelValue', $event.target.value)\"><option v-for=\"item in items\" :key=\"item\" :value=\"item\">{{ item }}</option></select>",
   },
   VTable: { template: "<table><slot /></table>" },
   VToolbar: { template: "<div><slot /></div>" },
