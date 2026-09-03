@@ -133,6 +133,15 @@
             :disabled="!daycare.isAdmin.value"
             :label="$t('daycare.settings.auto-publish-shopping-list')"
           />
+          <v-switch
+            v-model="form.automation.ingredient_writeback_enabled"
+            :disabled="!daycare.isAdmin.value"
+            :label="$t('daycare.settings.ingredient-writeback-enabled')"
+            hide-details
+          />
+          <p class="text-caption text-medium-emphasis mt-1">
+            {{ $t("daycare.settings.ingredient-writeback-enabled-hint") }}
+          </p>
         </v-card-text>
       </v-card>
 

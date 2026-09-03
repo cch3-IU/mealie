@@ -63,6 +63,17 @@
       {{ $t("daycare.recipe.edit-limited-notice") }}
     </p>
 
+    <v-divider class="my-3" />
+    <v-switch
+      v-model="ingredientWriteback"
+      :label="$t('daycare.recipe.ingredient-writeback')"
+      density="compact"
+      hide-details
+    />
+    <p class="text-caption text-medium-emphasis mt-1">
+      {{ $t("daycare.recipe.ingredient-writeback-hint") }}
+    </p>
+
     <v-btn
       type="submit"
       color="primary"
@@ -95,6 +106,7 @@ const FREEZABLE_OPTIONS = (["yes", "no", "uncertain"] as Freezability[]).map(val
 const STORAGE_OPTIONS = (["freezer", "refrigerator", "fresh", "shelf_stable", "unknown"] as PreferredBatchStorage[]).map(value => ({ value, title: i18n.t(`daycare.recipe.storage-${value}`) }));
 
 const enabled = ref(props.record.settings.enabled !== false);
+const ingredientWriteback = ref(props.record.ingredient_writeback);
 const portionsPerBatch = ref<number | null>(props.record.settings.daycare_portions_per_batch);
 const slotRoles = ref<SlotRoles>(usesToSlotRoles(props.record.classification?.uses));
 const batchable = ref(props.record.classification?.production.batchable ?? false);
@@ -119,6 +131,7 @@ function onSubmit() {
       enabled: enabled.value,
       daycare_portions_per_batch: normalizedPortionsPerBatch(),
     },
+    ingredient_writeback: ingredientWriteback.value,
   };
   if (props.record.classified) {
     payload.classification = {

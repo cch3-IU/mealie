@@ -1,6 +1,9 @@
 import { useUserApi } from "~/composables/api";
 import { mapDaycareError, type DaycareUiError } from "./use-daycare";
 import type {
+  IngredientWritebackPreview,
+  IngredientWritebackReceipt,
+  IngredientWritebackUndoResult,
   InventoryResponse,
   PlanDay,
   ProcessingState,
@@ -225,6 +228,50 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
     }
   }
 
+  /** Dry-run diff of what applying ingredient write-back would do, fetched on demand (never on mount). A read; never mutates. */
+  async function getIngredientWritebackPreview(): Promise<{ data: IngredientWritebackPreview | null; error: DaycareUiError | null }> {
+    const result = await api.daycare.getIngredientWritebackPreview(slugValue());
+    return result.data
+      ? { data: result.data, error: null }
+      : { data: null, error: mapDaycareError(result.error) };
+  }
+
+  /**
+   * `idempotencyKey`, when passed, lets a caller resend the exact same key on retry so a repeat
+   * tap replays rather than mutates twice — mirrors `useDaycare().completeWeek`.
+   */
+  async function applyIngredientWriteback(idempotencyKey?: string): Promise<{ data: IngredientWritebackReceipt | null; error: DaycareUiError | null }> {
+    mutating.value = true;
+    try {
+      const result = await api.daycare.applyIngredientWriteback(
+        slugValue(),
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      );
+      return result.data
+        ? { data: result.data, error: null }
+        : { data: null, error: mapDaycareError(result.error) };
+    }
+    finally {
+      mutating.value = false;
+    }
+  }
+
+  async function undoIngredientWriteback(idempotencyKey?: string): Promise<{ data: IngredientWritebackUndoResult | null; error: DaycareUiError | null }> {
+    mutating.value = true;
+    try {
+      const result = await api.daycare.undoIngredientWriteback(
+        slugValue(),
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      );
+      return result.data
+        ? { data: result.data, error: null }
+        : { data: null, error: mapDaycareError(result.error) };
+    }
+    finally {
+      mutating.value = false;
+    }
+  }
+
   return {
     recipeDaycare,
     inventory,
@@ -238,5 +285,8 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
     load,
     retryInventory,
     updateRecipeDaycare,
+    getIngredientWritebackPreview,
+    applyIngredientWriteback,
+    undoIngredientWriteback,
   };
 }

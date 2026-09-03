@@ -63,9 +63,17 @@
       {{ nextUseText }}
     </p>
 
-    <p v-if="processingText" class="mb-0">
+    <p v-if="processingText" class="mb-2">
       <span class="font-weight-medium">{{ $t("daycare.recipe.processing") }}:</span>
       {{ processingText }}
+    </p>
+
+    <p class="mb-0 d-flex align-center flex-wrap ga-2">
+      <span class="font-weight-medium">{{ $t("daycare.recipe.ingredient-writeback") }}:</span>
+      {{ record.ingredient_writeback ? $t("daycare.recipe.enabled") : $t("daycare.recipe.disabled") }}
+      <v-btn variant="text" size="x-small" class="px-1" @click="emit('preview-writeback')">
+        {{ $t("daycare.recipe.ingredient-writeback-preview-action") }}
+      </v-btn>
     </p>
   </div>
 </template>
@@ -83,7 +91,7 @@ interface Props {
   processingNote: ProcessingNote | null;
 }
 const props = withDefaults(defineProps<Props>(), { preparedError: null });
-const emit = defineEmits<{ "retry-prepared": [] }>();
+const emit = defineEmits<{ "retry-prepared": []; "preview-writeback": [] }>();
 
 const i18n = useI18n();
 

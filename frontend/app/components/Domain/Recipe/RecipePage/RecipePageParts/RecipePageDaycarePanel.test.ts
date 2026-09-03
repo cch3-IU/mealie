@@ -52,6 +52,7 @@ const recipeDaycareFixture: RecipeDaycare = {
   override_applied: false,
   override: null,
   settings: { enabled: true, daycare_portions_per_batch: 6, max_uses_per_week: null, max_inventory_uses_per_week: null, score_adjustment: null, reason: null },
+  ingredient_writeback: false,
 };
 
 const settingsFixture: PlannerSettings = {
@@ -74,6 +75,7 @@ const settingsFixture: PlannerSettings = {
     timezone: "America/Indiana/Indianapolis",
     auto_publish_meal_plan: false,
     auto_publish_shopping_list: false,
+    ingredient_writeback_enabled: false,
   },
   config_version: 1,
   week_start_weekday: "monday",
@@ -127,6 +129,7 @@ const processingFixture: ProcessingStatus = {
     recent: [],
     changed_since_plan: { week: null, planned_at: null, count: 0, recipes: [] },
   },
+  ingredient_writeback: { enabled: false, written: 0, eligible: 0, ambiguous: 0 },
 };
 
 function createRequests(getImpl: (url: string) => Promise<{ data: unknown; error: unknown }>): ApiRequestInstance {
@@ -139,11 +142,27 @@ function createRequests(getImpl: (url: string) => Promise<{ data: unknown; error
   };
 }
 
+const writebackPreviewFixture = {
+  slug: "chicken-barley-soup",
+  fingerprint_ok: true,
+  fingerprint_reason: null,
+  enabled_global: false,
+  enabled_recipe: false,
+  write_enabled: true,
+  can_apply: false,
+  rows: [],
+  creations: [],
+  ambiguities: [],
+  skipped: [],
+  receipt: null,
+};
+
 function happyPathGet(url: string) {
   if (url.endsWith("/daycare")) return Promise.resolve(apiResult(recipeDaycareFixture));
   if (url.endsWith("/settings")) return Promise.resolve(apiResult(settingsFixture));
   if (url.endsWith("/inventory")) return Promise.resolve(apiResult(inventoryFixture));
   if (url.endsWith("/processing")) return Promise.resolve(apiResult(processingFixture));
+  if (url.includes("/ingredient-writeback/preview")) return Promise.resolve(apiResult(writebackPreviewFixture));
   if (url.includes("/weeks/")) return Promise.resolve(apiResult(weekFixture));
   throw new Error(`unexpected GET ${url}`);
 }
@@ -156,12 +175,18 @@ const VFormStub = {
   template: "<form><slot /></form>",
 };
 
+const BaseDialogStub = {
+  props: { modelValue: Boolean, title: String, canSubmit: Boolean, canConfirm: Boolean, submitDisabled: Boolean, loading: Boolean },
+  emits: ["submit", "confirm", "update:modelValue"],
+  template: "<div v-if=\"modelValue\"><div class=\"title\">{{ title }}</div><slot /></div>",
+};
+
 function mountPanel() {
   return mount(RecipePageDaycarePanel, {
     props: { slug: "chicken-barley-soup", groupSlug: "home" },
     global: {
       mocks: { $globals: { icons: {} } },
-      stubs: { ...vuetifyStubs, VCheckbox: vuetifyStubs.VSwitch, VForm: VFormStub },
+      stubs: { ...vuetifyStubs, VCheckbox: vuetifyStubs.VSwitch, VForm: VFormStub, BaseDialog: BaseDialogStub },
     },
   });
 }
@@ -207,6 +232,7 @@ describe("RecipePageDaycarePanel", () => {
         uses: { breakfast: null, lunch: ["main"], snack: null },
         production: { batchable: true, freezable: "yes", preferred_batch_storage: "freezer" },
       },
+      ingredient_writeback: false,
     });
     expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
   });
@@ -254,6 +280,26 @@ describe("RecipePageDaycarePanel", () => {
     expect(inventoryCalls).toEqual(2);
     expect(wrapper.text()).toContain("4"); // physical prepared portions, after the retry succeeds
     expect(wrapper.text()).not.toContain("Unavailable");
+  });
+
+  test("preview cleaned ingredients opens the write-back dialog and fetches the preview", async () => {
+    requests = createRequests(happyPathGet);
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.find(".title").exists()).toBe(false);
+    const previewButton = wrapper.findAll("button").find(b => b.text() === "Preview cleaned ingredients");
+    expect(previewButton).toBeTruthy();
+
+    await previewButton!.trigger("click");
+    await flushPromises();
+
+    expect(requests.get).toHaveBeenCalledWith(
+      "/api/daycare/v1/recipes/chicken-barley-soup/ingredient-writeback/preview",
+      undefined,
+      undefined,
+    );
+    expect(wrapper.find(".title").text()).toEqual("Preview cleaned ingredients");
   });
 
   test("shows a not-tracked notice instead of an error when the sidecar hasn't seen this recipe yet", async () => {

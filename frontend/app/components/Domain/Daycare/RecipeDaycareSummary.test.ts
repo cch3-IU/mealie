@@ -31,6 +31,7 @@ function recordFixture(overrides: Partial<RecipeDaycare> = {}): RecipeDaycare {
     override_applied: false,
     override: null,
     settings: { enabled: true, daycare_portions_per_batch: 6, max_uses_per_week: null, max_inventory_uses_per_week: null, score_adjustment: null, reason: null },
+    ingredient_writeback: false,
     ...overrides,
   };
 }
@@ -111,6 +112,23 @@ describe("RecipeDaycareSummary", () => {
     expect(wrapper.text()).toContain("Unavailable");
     expect(wrapper.text()).not.toContain("Prepared now: 0");
     expect(wrapper.text()).not.toContain("Prepared now:0");
+  });
+
+  test("shows the ingredient write-back state", () => {
+    const enabledWrapper = mountSummary({ record: recordFixture({ ingredient_writeback: true }) });
+    expect(enabledWrapper.text()).toContain("Ingredient write-back");
+    expect(enabledWrapper.text()).toContain("Enabled");
+
+    const disabledWrapper = mountSummary({ record: recordFixture({ ingredient_writeback: false }) });
+    expect(disabledWrapper.text()).toContain("Disabled");
+  });
+
+  test("emits preview-writeback when the preview action is clicked", async () => {
+    const wrapper = mountSummary({ record: recordFixture() });
+    const previewButton = wrapper.findAll("button").find(b => b.text() === "Preview cleaned ingredients");
+    expect(previewButton).toBeDefined();
+    await previewButton!.trigger("click");
+    expect(wrapper.emitted("preview-writeback")).toHaveLength(1);
   });
 
   test("emits retry-prepared when the retry affordance is clicked after a failed inventory fetch", async () => {

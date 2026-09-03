@@ -118,6 +118,8 @@ export interface AutomationSettings {
   timezone: string;
   auto_publish_meal_plan: boolean;
   auto_publish_shopping_list: boolean;
+  /** Household-wide gate for ingredient write-back; a recipe also needs its own `RecipeDaycare.ingredient_writeback` on. */
+  ingredient_writeback_enabled: boolean;
 }
 
 export interface PlannerSettingsUpdate {
@@ -204,6 +206,8 @@ export interface RecipeDaycare {
   override_applied: boolean;
   override: Record<string, unknown> | null;
   settings: RecipeSettings;
+  /** Per-recipe opt-in for writing cleaned ingredients back to the Mealie recipe; off by default. Also needs `PlannerSettings.automation.ingredient_writeback_enabled` on household-wide. */
+  ingredient_writeback: boolean;
 }
 
 export interface RecipeSettingsPatch {
@@ -242,6 +246,86 @@ export interface ClassificationOverridePatch {
 export interface RecipeDaycareUpdate {
   settings?: RecipeSettingsPatch | null;
   classification?: ClassificationOverridePatch | null;
+  ingredient_writeback?: boolean | null;
+}
+
+// ---------------------------------------------------------------------------
+// Ingredient write-back
+// ---------------------------------------------------------------------------
+
+export type IngredientWritebackRowStatus = "structured" | "unchanged" | "plain_no_quantity" | "ambiguous";
+
+export interface IngredientWritebackIngredient {
+  quantity: number | null;
+  unit: string | null;
+  food: string | null;
+  note: string | null;
+  original_text: string | null;
+  reference_id: string | null;
+}
+
+export interface IngredientWritebackRow {
+  index: number;
+  before: IngredientWritebackIngredient;
+  after: IngredientWritebackIngredient;
+  status: IngredientWritebackRowStatus;
+}
+
+export type IngredientWritebackOrganizerKind = "food" | "unit";
+
+export interface IngredientWritebackCreation {
+  kind: IngredientWritebackOrganizerKind;
+  name: string;
+}
+
+export interface IngredientWritebackAmbiguity {
+  kind: IngredientWritebackOrganizerKind;
+  name: string;
+  candidates: string[];
+}
+
+export interface IngredientWritebackSkipped {
+  index: number;
+  reason: string;
+}
+
+export interface IngredientWritebackReceipt {
+  slug: string;
+  applied_at: string;
+  fingerprint: string;
+  rows_written: number;
+  rows_plain: number;
+  foods_created: string[];
+  units_created: string[];
+  verified: boolean;
+  receipt_path: string | null;
+}
+
+export interface IngredientWritebackPreview {
+  slug: string;
+  /** False when the recipe changed since the sidecar last saw it — apply will 409 `recipe_edited` until refreshed. */
+  fingerprint_ok: boolean;
+  fingerprint_reason: string | null;
+  /** `PlannerSettings.automation.ingredient_writeback_enabled`. */
+  enabled_global: boolean;
+  /** `RecipeDaycare.ingredient_writeback` for this recipe. */
+  enabled_recipe: boolean;
+  /** The sidecar's global write gate (mirrors `StatusResponse.write_enabled`). */
+  write_enabled: boolean;
+  /** Sidecar-computed: true only when every other gate above is satisfied and there are no unresolved ambiguities. */
+  can_apply: boolean;
+  rows: IngredientWritebackRow[];
+  creations: IngredientWritebackCreation[];
+  ambiguities: IngredientWritebackAmbiguity[];
+  skipped: IngredientWritebackSkipped[];
+  /** The receipt from a prior apply, when one exists for the current fingerprint. */
+  receipt: IngredientWritebackReceipt | null;
+}
+
+export interface IngredientWritebackUndoResult {
+  slug: string;
+  restored_at: string;
+  rows_restored: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -863,6 +947,13 @@ export interface ProcessingQueue {
   changed_since_plan: ChangedSincePlan;
 }
 
+export interface IngredientWritebackStatus {
+  enabled: boolean;
+  written: number;
+  eligible: number;
+  ambiguous: number;
+}
+
 export interface ProcessingStatus {
   write_enabled: boolean;
   last_export_at: string | null;
@@ -874,6 +965,7 @@ export interface ProcessingStatus {
   recipes_lacking_daycare_yield: string[];
   llm_triggered: false;
   processing: ProcessingQueue;
+  ingredient_writeback: IngredientWritebackStatus;
 }
 
 export interface PollRequest {

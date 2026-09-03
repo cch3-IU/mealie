@@ -72,6 +72,16 @@ describe("DaycareAPI reads", () => {
     expect(requests.get).toHaveBeenCalledWith("/api/daycare/v1/recipes/chicken-barley-soup/daycare", undefined, undefined);
   });
 
+  test("getIngredientWritebackPreview hits the recipe's preview path with no Idempotency-Key", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).getIngredientWritebackPreview("chicken-barley-soup");
+    expect(requests.get).toHaveBeenCalledWith(
+      "/api/daycare/v1/recipes/chicken-barley-soup/ingredient-writeback/preview",
+      undefined,
+      undefined,
+    );
+  });
+
   test("getInventory, getReservations and getProcessingStatus hit their fixed paths", async () => {
     const requests = createRequests();
     const api = new DaycareAPI(requests);
@@ -157,6 +167,7 @@ describe("DaycareAPI mutations attach a fresh Idempotency-Key", () => {
         timezone: "America/Indiana/Indianapolis",
         auto_publish_meal_plan: false,
         auto_publish_shopping_list: false,
+        ingredient_writeback_enabled: false,
       },
     };
     await new DaycareAPI(requests).updateSettings(payload);
@@ -205,6 +216,21 @@ describe("DaycareAPI mutations attach a fresh Idempotency-Key", () => {
     expect(url).toEqual("/api/daycare/v1/inventory/lots/42");
     expect(body).toEqual({ portions_remaining: 3, use_by: "2026-05-01" });
     expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
+  });
+
+  test("applyIngredientWriteback and undoIngredientWriteback POST with an empty body and a UUID header", async () => {
+    const requests = createRequests();
+    const api = new DaycareAPI(requests);
+    await api.applyIngredientWriteback("chicken-barley-soup");
+    await api.undoIngredientWriteback("chicken-barley-soup");
+    const applyCall = vi.mocked(requests.post).mock.calls[0];
+    const undoCall = vi.mocked(requests.post).mock.calls[1];
+    expect(applyCall[0]).toEqual("/api/daycare/v1/recipes/chicken-barley-soup/ingredient-writeback");
+    expect(applyCall[1]).toEqual({});
+    expect(applyCall[2]?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
+    expect(undoCall[0]).toEqual("/api/daycare/v1/recipes/chicken-barley-soup/ingredient-writeback/undo");
+    expect(undoCall[1]).toEqual({});
+    expect(undoCall[2]?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
   });
 
   test("a caller-supplied Idempotency-Key is preserved rather than overwritten, so a retry can replay", async () => {
