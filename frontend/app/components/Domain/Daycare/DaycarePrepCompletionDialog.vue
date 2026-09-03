@@ -188,7 +188,7 @@ async function loadReceipt() {
     phase.value = "receipt";
     return;
   }
-  if (result.error?.status === 404 && result.error.code === "receipt_not_found") {
+  if (result.error?.status === 404) {
     receipt.value = { committedAt: props.committedAt, summary: null, recipes: null };
     replayNote.value = null;
     phase.value = "receipt";

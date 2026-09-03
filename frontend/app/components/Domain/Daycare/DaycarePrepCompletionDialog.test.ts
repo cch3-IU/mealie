@@ -179,4 +179,19 @@ describe("DaycarePrepCompletionDialog for an already-committed week", () => {
     expect(wrapper.text()).toContain("Receipt detail isn't available");
     expect(wrapper.text()).not.toContain("portions used from what was already in the freezer");
   });
+
+  test("falls back to a completed-on date and a detail-unavailable note on a bare 404 with no structured error code", async () => {
+    const completeWeek = vi.fn();
+    const getCommitReceipt = vi.fn(() => Promise.resolve({
+      data: null,
+      error: daycareError({ status: 404, code: null }),
+    }));
+    const wrapper = mountDialog({ committed: true, committedAt: "2026-01-06T12:00:00Z", completeWeek, getCommitReceipt });
+    await flushPromises();
+
+    expect(completeWeek).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain("Completed on");
+    expect(wrapper.text()).toContain("Receipt detail isn't available");
+    expect(wrapper.text()).not.toContain("This week hasn't been planned yet");
+  });
 });

@@ -52,10 +52,10 @@
 import type { CommitReceiptSummary, CompletionPreviewRecipe } from "~/lib/api/types/daycare";
 
 interface Props {
-  /** ISO timestamp the week was marked complete, or null when unknown (e.g. a bare CommitReference). */
+  /** ISO timestamp the week was marked complete, or null when unknown (e.g. a receipt-not-found fallback). */
   committedAt: string | null;
   summary: CommitReceiptSummary | null;
-  /** Full per-recipe breakdown, when available (present on a fresh 200 receipt; absent on a replayed CommitReference). */
+  /** Full per-recipe breakdown, when available (present on a fresh 200 receipt; absent on a receipt-not-found fallback). */
   recipes?: CompletionPreviewRecipe[] | null;
 }
 const props = defineProps<Props>();

@@ -525,19 +525,6 @@ export interface CommitReceipt {
   completion_preview?: CompletionPreview | null;
 }
 
-/**
- * Shape of the `details` object on a 409 `week_committed` error (see the
- * sidecar's `WeekService._commit_reference`) — what a repeat completion
- * attempt on an already-committed week carries instead of a fresh receipt.
- */
-export interface CommitReference {
-  week_start: string;
-  committed_at: string | null;
-  made_date: string | null;
-  receipt: string | null;
-  summary: CommitReceiptSummary;
-}
-
 export interface UndoResult {
   schema_version: number;
   week_start: string;
