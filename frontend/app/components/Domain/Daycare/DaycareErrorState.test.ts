@@ -31,7 +31,7 @@ describe("DaycareErrorState", () => {
     ["conflict", "error"],
     ["server", "error"],
   ] as const)("maps error kind %s to alert type %s", (kind, type) => {
-    const wrapper = mountError({ status: null, code: null, message: null, kind });
+    const wrapper = mountError({ status: null, code: null, message: null, kind, details: null });
     expect(wrapper.find(".v-alert").attributes("data-type")).toEqual(type);
   });
 });

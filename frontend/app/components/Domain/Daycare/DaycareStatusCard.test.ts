@@ -61,7 +61,7 @@ describe("DaycareStatusCard", () => {
   });
 
   test("shows an error state", () => {
-    const wrapper = mountCard({ error: { status: 401, code: null, message: null, kind: "unauthorized" } });
+    const wrapper = mountCard({ error: { status: 401, code: null, message: null, kind: "unauthorized", details: null } });
     expect(wrapper.text()).toContain("session needs to be refreshed");
   });
 

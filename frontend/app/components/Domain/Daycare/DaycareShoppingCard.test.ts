@@ -50,7 +50,7 @@ describe("DaycareShoppingCard", () => {
   });
 
   test("shows an error state", () => {
-    const wrapper = mountCard({ error: { status: 502, code: null, message: null, kind: "unreachable" } });
+    const wrapper = mountCard({ error: { status: 502, code: null, message: null, kind: "unreachable", details: null } });
     expect(wrapper.text()).toContain("temporarily unavailable");
   });
 

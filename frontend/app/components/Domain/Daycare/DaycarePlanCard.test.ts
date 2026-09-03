@@ -73,7 +73,7 @@ describe("DaycarePlanCard", () => {
   });
 
   test("shows an error state when the fetch failed", () => {
-    const wrapper = mountCard({ error: { status: 503, code: "mealie_unavailable", message: "Mealie is unavailable.", kind: "unreachable" } });
+    const wrapper = mountCard({ error: { status: 503, code: "mealie_unavailable", message: "Mealie is unavailable.", kind: "unreachable", details: null } });
     expect(wrapper.text()).toContain("Mealie is unavailable.");
   });
 

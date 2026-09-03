@@ -27,6 +27,8 @@ export interface DaycareUiError {
   /** The sidecar's own message, when it sent one. Null for network failures and 401s the axios interceptor will handle. */
   message: string | null;
   kind: DaycareErrorKind;
+  /** The sidecar error envelope's `details` object — e.g. per-field validation issues on a 422. */
+  details: Record<string, unknown> | null;
 }
 
 /**
@@ -36,10 +38,10 @@ export interface DaycareUiError {
  * text stays in one place.
  */
 export function mapDaycareError(error: unknown): DaycareUiError {
-  const axiosError = error as { response?: { status: number; data?: { error?: { code: string; message: string } } } } | null | undefined;
+  const axiosError = error as { response?: { status: number; data?: { error?: { code: string; message: string; details?: Record<string, unknown> } } } } | null | undefined;
 
   if (!axiosError || !axiosError.response) {
-    return { status: null, code: null, message: null, kind: "offline" };
+    return { status: null, code: null, message: null, kind: "offline", details: null };
   }
 
   const status = axiosError.response.status;
@@ -62,7 +64,7 @@ export function mapDaycareError(error: unknown): DaycareUiError {
                   ? "server"
                   : "unknown";
 
-  return { status, code: detail?.code ?? null, message: detail?.message ?? null, kind };
+  return { status, code: detail?.code ?? null, message: detail?.message ?? null, kind, details: detail?.details ?? null };
 }
 
 const WEEKDAY_ORDER: Weekday[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];

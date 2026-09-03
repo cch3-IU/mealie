@@ -41,7 +41,7 @@ describe("DaycarePrepCard", () => {
   });
 
   test("shows an error state", () => {
-    const wrapper = mountCard({ error: { status: 500, code: null, message: "boom", kind: "server" } });
+    const wrapper = mountCard({ error: { status: 500, code: null, message: "boom", kind: "server", details: null } });
     expect(wrapper.text()).toContain("boom");
   });
 
