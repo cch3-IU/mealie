@@ -35,7 +35,7 @@
                 {{ item.hint }}
               </template>
               <template v-if="item.links">
-                <v-btn size="small" variant="text" class="px-0" @click="toggleExpanded(item.key)">
+                <v-btn size="small" variant="text" class="ml-1 px-0" @click="toggleExpanded(item.key)">
                   {{ expanded[item.key] ? $t("daycare.status.hide-details") : $t("daycare.status.show-details") }}
                 </v-btn>
                 <v-expand-transition>
@@ -54,7 +54,7 @@
 
         <v-alert v-if="relaxedSpacing" type="info" variant="tonal" density="comfortable" class="mb-2">
           {{ $t("daycare.status.relaxed-spacing-group", relaxedSpacing.count) }}
-          <v-btn size="small" variant="text" class="px-0" @click="showRelaxedDetails = !showRelaxedDetails">
+          <v-btn size="small" variant="text" class="ml-1 px-0" @click="showRelaxedDetails = !showRelaxedDetails">
             {{ showRelaxedDetails ? $t("daycare.status.hide-details") : $t("daycare.status.show-details") }}
           </v-btn>
           <v-expand-transition>
