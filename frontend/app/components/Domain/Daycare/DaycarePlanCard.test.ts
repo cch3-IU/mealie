@@ -1,13 +1,13 @@
-import { mount } from "@vue/test-utils";
-import { describe, expect, test } from "vitest";
+import { flushPromises, mount } from "@vue/test-utils";
+import { describe, expect, test, vi } from "vitest";
 import DaycarePlanCard from "./DaycarePlanCard.vue";
 import { vuetifyStubs } from "~/tests/stub-vuetify";
 import type { WeekResponse } from "~/lib/api/types/daycare";
 
 const BaseDialogStub = {
-  props: ["modelValue", "title"],
-  emits: ["confirm", "update:modelValue"],
-  template: "<div v-if=\"modelValue\"><slot /><button class=\"confirm\" @click=\"$emit('confirm')\">confirm</button></div>",
+  props: ["modelValue", "title", "canSubmit", "submitDisabled"],
+  emits: ["confirm", "submit", "update:modelValue"],
+  template: "<div v-if=\"modelValue\" class=\"dialog\"><div class=\"title\">{{ title }}</div><slot /><button class=\"confirm\" @click=\"$emit('confirm')\">confirm</button><button v-if=\"canSubmit\" class=\"submit\" :disabled=\"submitDisabled\" @click=\"!submitDisabled && $emit('submit')\">submit</button></div>",
 };
 
 function weekFixture(overrides: Partial<WeekResponse> = {}): WeekResponse {
@@ -57,6 +57,9 @@ function mountCard(props: Partial<InstanceType<typeof DaycarePlanCard>["$props"]
       error: null,
       mutating: false,
       offline: false,
+      isAdmin: false,
+      getUnlockPreview: vi.fn(() => Promise.resolve({ data: null, error: null })),
+      unlockWeek: vi.fn(() => Promise.resolve({ data: null, error: null })),
       ...props,
     },
     global: {
@@ -138,5 +141,56 @@ describe("DaycarePlanCard", () => {
     const buttons = wrapper.findAll("button");
     const regenerateButton = buttons.find(b => b.text().includes("Regenerate"))!;
     expect(regenerateButton.attributes("disabled")).toBeDefined();
+  });
+
+  test("an admin sees Unlock Week on a locked week whose unlock action is available", () => {
+    const wrapper = mountCard({
+      week: weekFixture({ committed: true, unlock: { available: true, safe: true, reasons: [] } }),
+      isAdmin: true,
+    });
+    expect(wrapper.findAll("button").some(b => b.text() === "Unlock Week")).toBe(true);
+  });
+
+  test("a non-admin never sees Unlock Week even when the action is available", () => {
+    const wrapper = mountCard({
+      week: weekFixture({ committed: true, unlock: { available: true, safe: true, reasons: [] } }),
+      isAdmin: false,
+    });
+    expect(wrapper.findAll("button").some(b => b.text() === "Unlock Week")).toBe(false);
+  });
+
+  test("hides Unlock Week when the week response carries no unlock field (older sidecar without the endpoint)", () => {
+    const wrapper = mountCard({
+      week: weekFixture({ committed: true }),
+      isAdmin: true,
+    });
+    expect(wrapper.findAll("button").some(b => b.text() === "Unlock Week")).toBe(false);
+  });
+
+  test("hides Unlock Week when the sidecar reports the action unavailable", () => {
+    const wrapper = mountCard({
+      week: weekFixture({ committed: true, unlock: { available: false, safe: false, reasons: [] } }),
+      isAdmin: true,
+    });
+    expect(wrapper.findAll("button").some(b => b.text() === "Unlock Week")).toBe(false);
+  });
+
+  test("clicking Unlock Week opens the unlock dialog, which loads its preview", async () => {
+    const getUnlockPreview = vi.fn(() => Promise.resolve({
+      data: { created_lots: [], consumed_lots_restored: [], reservations_released: [], downstream_weeks_marked_stale: [], safe: true, reasons: [] },
+      error: null,
+    }));
+    const wrapper = mountCard({
+      week: weekFixture({ committed: true, unlock: { available: true, safe: true, reasons: [] } }),
+      isAdmin: true,
+      getUnlockPreview,
+    });
+
+    const unlockButton = wrapper.findAll("button").find(b => b.text() === "Unlock Week")!;
+    await unlockButton.trigger("click");
+    await flushPromises();
+
+    expect(getUnlockPreview).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("Unlock this week's completed prep?");
   });
 });

@@ -27,6 +27,9 @@ import type {
   SimpleFoodUpdate,
   StatusResponse,
   UndoResult,
+  UnlockPreview,
+  UnlockReceipt,
+  UnlockRequest,
   WeekResponse,
 } from "~/lib/api/types/daycare";
 
@@ -47,6 +50,8 @@ const routes = {
   weekComplete: (week: string) => `${prefix}/weeks/${week}/complete`,
   weekCommitReceipt: (week: string) => `${prefix}/weeks/${week}/commit-receipt`,
   weekUndoComplete: (week: string) => `${prefix}/weeks/${week}/undo-complete`,
+  weekUnlockPreview: (week: string) => `${prefix}/weeks/${week}/unlock-preview`,
+  weekUnlock: (week: string) => `${prefix}/weeks/${week}/unlock`,
   weekShopping: (week: string) => `${prefix}/weeks/${week}/shopping`,
   weekShoppingPublish: (week: string) => `${prefix}/weeks/${week}/shopping/publish`,
   inventory: `${prefix}/inventory`,
@@ -181,6 +186,28 @@ export class DaycareAPI extends BaseAPI {
     return await this.requests.post<UndoResult>(
       routes.weekUndoComplete(week),
       {},
+      withIdempotencyKey(config),
+    );
+  }
+
+  /**
+   * Read-only: what unlocking a completed week would do (lots removed/restored,
+   * reservations released, downstream weeks marked stale) and whether the
+   * sidecar considers it safe. Not yet present on every deployed sidecar —
+   * callers should treat a bare 404/405 as "not available yet".
+   */
+  async getUnlockPreview(week: string, config?: AxiosRequestConfig) {
+    return await this.requests.get<UnlockPreview>(routes.weekUnlockPreview(week), undefined, config);
+  }
+
+  /**
+   * Uncommits a completed week. A 409 `unlock_unsafe` (when `force` is false and the
+   * plan isn't safe) carries the same plan shape in its `details`.
+   */
+  async unlockWeek(week: string, payload: UnlockRequest = {}, config?: AxiosRequestConfig) {
+    return await this.requests.post<UnlockReceipt>(
+      routes.weekUnlock(week),
+      payload,
       withIdempotencyKey(config),
     );
   }

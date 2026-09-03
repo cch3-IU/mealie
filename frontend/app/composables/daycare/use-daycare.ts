@@ -8,6 +8,8 @@ import type {
   PublishRequest,
   RecipeDaycareUpdate,
   SimpleFoodUpdate,
+  UnlockPlan,
+  UnlockRequest,
   Weekday,
 } from "~/lib/api/types/daycare";
 
@@ -80,6 +82,33 @@ export function committedAtFromError(error: DaycareUiError | null): string | nul
   if (!error || error.code !== "week_committed") return null;
   const committedAt = error.details?.committed_at;
   return typeof committedAt === "string" ? committedAt : null;
+}
+
+/**
+ * The unlock plan carried in a 409 `unlock_unsafe` response's `details` — the sidecar
+ * sends the same shape as `GET .../unlock-preview` when a `force: false` unlock is
+ * refused, so a dialog can refresh to the latest known state without a second read.
+ */
+export function unlockPlanFromError(error: DaycareUiError | null): UnlockPlan | null {
+  if (!error || error.code !== "unlock_unsafe" || !error.details) return null;
+  const details = error.details;
+  const createdLots = Array.isArray(details.created_lots) ? details.created_lots as Record<string, unknown>[] : [];
+  const consumedLotsRestored = Array.isArray(details.consumed_lots_restored) ? details.consumed_lots_restored as Record<string, unknown>[] : [];
+  const reservationsReleased = Array.isArray(details.reservations_released) ? details.reservations_released as UnlockPlan["reservations_released"] : [];
+  const downstreamWeeksMarkedStale = Array.isArray(details.downstream_weeks_marked_stale)
+    ? (details.downstream_weeks_marked_stale as unknown[]).filter((w): w is string => typeof w === "string")
+    : [];
+  const reasons = Array.isArray(details.reasons)
+    ? (details.reasons as unknown[]).filter((r): r is string => typeof r === "string")
+    : [];
+  return {
+    created_lots: createdLots,
+    consumed_lots_restored: consumedLotsRestored,
+    reservations_released: reservationsReleased,
+    downstream_weeks_marked_stale: downstreamWeeksMarkedStale,
+    safe: typeof details.safe === "boolean" ? details.safe : false,
+    reasons,
+  };
 }
 
 const WEEKDAY_ORDER: Weekday[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -302,6 +331,33 @@ export function useDaycare(options: UseDaycareOptions = {}) {
   }
 
   /**
+   * The unlock preview is a read: fetched on demand whenever a caller needs to show
+   * what unlocking a completed week would do before committing to it.
+   */
+  async function getUnlockPreview() {
+    const result = await api.daycare.getUnlockPreview(selectedWeek.value);
+    return result.data
+      ? { data: result.data, error: null as DaycareUiError | null }
+      : { data: null, error: mapDaycareError(result.error) };
+  }
+
+  /**
+   * `idempotencyKey`, when passed, lets a caller resend the exact same key on a
+   * retry (e.g. resubmitting with `force: true` after a `unlock_unsafe` 409) so the
+   * sidecar replays the same logical mutation rather than treating it as a second one.
+   */
+  async function unlockWeek(payload?: UnlockRequest, idempotencyKey?: string) {
+    return await runMutation(
+      () => api.daycare.unlockWeek(
+        selectedWeek.value,
+        payload,
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      ),
+      refreshWeekScoped,
+    );
+  }
+
+  /**
    * The completion preview is a read: fetched on demand (never on mount)
    * whenever a caller needs to show what completing the week would do.
    */
@@ -397,6 +453,8 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     undoCompleteWeek,
     getCompletionPreview,
     getCommitReceipt,
+    getUnlockPreview,
+    unlockWeek,
     updateSettings,
     updateRecipeDaycare,
     updateSimpleFood,

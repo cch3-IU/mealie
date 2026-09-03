@@ -34,6 +34,8 @@ function daycareStateFixture() {
     publishShopping,
     completeWeek: vi.fn(),
     undoCompleteWeek: vi.fn(),
+    getUnlockPreview: vi.fn(),
+    unlockWeek: vi.fn(),
     updateSettings: vi.fn(),
     updateRecipeDaycare: vi.fn(),
     updateSimpleFood: vi.fn(),
@@ -56,8 +58,8 @@ vi.stubGlobal("definePageMeta", () => {});
 function stub(name: string) {
   return {
     name,
-    props: ["week", "weekEmpty", "loading", "error", "mutating", "offline", "shopping", "inventory", "status", "processing", "productionRows", "blockers", "groupSlug", "modelValue", "disabled"],
-    emits: ["regenerate", "preview", "publish", "update:modelValue"],
+    props: ["week", "weekEmpty", "loading", "error", "mutating", "offline", "shopping", "inventory", "status", "processing", "productionRows", "blockers", "groupSlug", "modelValue", "disabled", "isAdmin", "getUnlockPreview", "unlockWeek"],
+    emits: ["regenerate", "unlocked", "preview", "publish", "update:modelValue"],
     template: "<div><slot /></div>",
   };
 }
@@ -112,6 +114,26 @@ describe("Daycare dashboard page", () => {
     const wrapper = mountPage();
     await wrapper.findComponent({ name: "PlanCardStub" }).vm.$emit("regenerate");
     expect(regenerateWeek).toHaveBeenCalledTimes(1);
+  });
+
+  test("an unlocked plan card event toasts success", async () => {
+    toastAlert.open = false;
+    const wrapper = mountPage();
+
+    await wrapper.findComponent({ name: "PlanCardStub" }).vm.$emit("unlocked", { week_start: "2026-01-05", unlocked_at: "2026-01-07T00:00:00Z" });
+
+    expect(toastAlert.open).toBe(true);
+    expect(toastAlert.text).toEqual("Week unlocked.");
+  });
+
+  test("passes isAdmin and the unlock functions to the plan card", () => {
+    daycareState.isAdmin.value = true;
+    const wrapper = mountPage();
+
+    const planCard = wrapper.findComponent({ name: "PlanCardStub" });
+    expect(planCard.props("isAdmin")).toBe(true);
+    expect(planCard.props("getUnlockPreview")).toBe(daycareState.getUnlockPreview);
+    expect(planCard.props("unlockWeek")).toBe(daycareState.unlockWeek);
   });
 
   test("shopping preview and publish call publishShopping with the right dry_run flag", async () => {

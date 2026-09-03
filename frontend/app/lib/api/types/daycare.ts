@@ -380,6 +380,8 @@ export interface WeekResponse {
   artifacts: Record<string, string>;
   publication: PublicationStatus;
   plan: WeekPlan;
+  /** Absent on a sidecar that predates the unlock feature — callers must treat a missing/falsy `available` as "hide the action", not an error. */
+  unlock?: UnlockAvailability;
 }
 
 export type PublicationOutcomeStatus = "published" | "pending" | "ambiguous" | "failed" | "dry_run";
@@ -531,6 +533,61 @@ export interface UndoResult {
   undone_at: string;
   deleted_leftover_lot_ids: number[];
   restored_source_lots: Record<string, unknown>[];
+}
+
+// ---------------------------------------------------------------------------
+// Unlock (uncommit a completed week)
+// ---------------------------------------------------------------------------
+
+export interface UnlockAvailability {
+  available: boolean;
+  safe: boolean;
+  reasons: string[];
+}
+
+export interface UnlockReservationRelease {
+  week: string;
+  recipe: string;
+  portions: number;
+}
+
+/**
+ * `created_lots`/`consumed_lots_restored` entries are typed loosely (mirrors
+ * `UndoResult.restored_source_lots` above) since the contract only pins down
+ * `reservations_released`'s shape; the dialog reads an optional `portions`
+ * field defensively rather than assuming every lot entry carries one.
+ */
+export interface UnlockPlan {
+  created_lots: Record<string, unknown>[];
+  consumed_lots_restored: Record<string, unknown>[];
+  reservations_released: UnlockReservationRelease[];
+  downstream_weeks_marked_stale: string[];
+  safe: boolean;
+  reasons: string[];
+}
+
+export type UnlockPreview = UnlockPlan;
+
+export interface UnlockRequest {
+  reason?: string | null;
+  force?: boolean;
+}
+
+/**
+ * Shape assumed to echo `UnlockPlan`'s fields plus what-actually-happened fields; the sidecar's
+ * exact receipt schema isn't confirmed yet (see overlay/README.md's Phase F8 entry), so every
+ * plan-shaped field here is optional and the dialog must render "detail unavailable" rather than
+ * crash if the real receipt omits one — mirrors `CommitReceipt.completion_preview?` below.
+ */
+export interface UnlockReceipt {
+  week_start: string;
+  unlocked_at: string;
+  reason?: string | null;
+  forced?: boolean;
+  created_lots?: Record<string, unknown>[];
+  consumed_lots_restored?: Record<string, unknown>[];
+  reservations_released?: UnlockReservationRelease[];
+  downstream_weeks_marked_stale?: string[];
 }
 
 // ---------------------------------------------------------------------------
