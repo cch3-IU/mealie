@@ -648,6 +648,11 @@ export interface LotCreate {
   notes?: string | null;
 }
 
+export interface LotPatch {
+  portions_remaining?: number;
+  use_by?: string | null;
+}
+
 export interface LotConsumeRequest {
   portions: number;
 }

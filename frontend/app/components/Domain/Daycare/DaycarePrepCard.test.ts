@@ -88,11 +88,14 @@ describe("DaycarePrepCard", () => {
     expect(wrapper.text()).toContain("Nothing to prep for this week.");
   });
 
-  test("lists recipes needing production with a batch count and an Open Recipe link", () => {
+  test("lists recipes needing production with a batch count, and the recipe title itself links to the recipe page", () => {
     const wrapper = mountCard({ productionRows: [row({ batches_to_make: 2 })] });
     expect(wrapper.text()).toContain("Chicken Barley Soup");
     expect(wrapper.text()).toContain("2 batches");
-    expect(wrapper.html()).toContain("/g/family/r/chicken-barley-soup");
+    expect(wrapper.text()).not.toContain("Open Recipe");
+
+    const titleLink = wrapper.findAll("button").find(b => b.text() === "Chicken Barley Soup")!;
+    expect(titleLink.attributes("to")).toEqual("/g/family/r/chicken-barley-soup");
   });
 
   test("surfaces blockers as an actionable warning", () => {

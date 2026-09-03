@@ -24,8 +24,20 @@ export const vuetifyStubs = {
     props: ["modelValue"],
     template: "<div v-if=\"modelValue\" class=\"v-dialog\"><slot /></div>",
   },
+  VDatePicker: {
+    props: ["modelValue"],
+    emits: ["update:modelValue"],
+    template: "<input type=\"date\" @change=\"$emit('update:modelValue', new Date($event.target.value + 'T00:00:00'))\">",
+  },
   VDivider: { template: "<hr>" },
   VExpandTransition: { template: "<div><slot /></div>" },
+  // Always renders both the activator and menu content (rather than gating on modelValue) so
+  // tests can interact with the menu's contents without first simulating the open click.
+  VMenu: {
+    props: ["modelValue"],
+    emits: ["update:modelValue"],
+    template: "<div class=\"v-menu\"><slot name=\"activator\" :props=\"{}\" /><div class=\"v-menu-content\"><slot /></div></div>",
+  },
   VForm: {
     emits: ["submit"],
     template: "<form @submit.prevent=\"$emit('submit')\"><slot /></form>",
