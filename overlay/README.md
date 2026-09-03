@@ -19,6 +19,21 @@ reason.
   Docker). Backend tests are intentionally skipped — this fork never changes
   backend Python. No upstream workflow file is edited.
 
+- `frontend/app/composables/use-recipe-exit.ts` — holds the last visited
+  recipe-list route (`/g/{groupSlug}` with its query/filter state) for this
+  session, so the exit control can return to it, falling back to the group's
+  Recipes page when there's no such entry (e.g. a direct deep link).
+  Intentionally does not use `document.referrer`.
+
 ## Modified upstream files
 
-(none yet)
+### Phase 9 — Recipe page back/X control (charter §7 Phase 9, §23.17)
+
+| Upstream file | Reason |
+| --- | --- |
+| `frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageHeader.vue` | Forward a new `exit` event from `RecipeActionMenu` up to `RecipePage.vue`, alongside the existing (untouched) `close` event used by edit-mode discard. |
+| `frontend/app/components/Domain/Recipe/RecipeActionMenu.vue` | Add a thumb-reachable X/back control, shown only in view mode (`!open`), that emits `exit`. |
+| `frontend/app/components/Domain/Recipe/RecipePage/RecipePage.vue` | Minimal wiring: compute the exit destination via `useRecipeExit` and `router.push` it on `@exit`. Does not touch the existing `closeEditor`/discard-dialog logic. |
+| `frontend/app/lang/messages/en-US.json` | Add the `general.back-to-recipes` string for the new control's label/tooltip. |
+
+Not touched: `DefaultLayout.vue`, Daycare nav/pages/client code — owned by a parallel lane.

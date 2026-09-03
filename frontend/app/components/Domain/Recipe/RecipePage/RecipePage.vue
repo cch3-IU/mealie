@@ -30,6 +30,7 @@
           @save="saveRecipe"
           @delete="deleteRecipe"
           @close="closeEditor"
+          @exit="exitRecipe"
         />
         <RecipeJsonEditor
           v-if="isEditJSON"
@@ -239,6 +240,7 @@ import RecipeDialogBulkAdd from "~/components/Domain/Recipe/RecipeDialogBulkAdd.
 import RecipeNotes from "~/components/Domain/Recipe/RecipeNotes.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useNavigationWarning } from "~/composables/use-navigation-warning";
+import { useRecipeExit } from "~/composables/use-recipe-exit";
 
 const recipe = defineModel<NoUndefinedField<Recipe>>({ required: true });
 
@@ -254,6 +256,11 @@ const api = useUserApi();
 const { pageMode, setMode, isEditForm, isEditJSON, isCookMode, isEditMode, isParsing, toggleCookMode, toggleIsParsing }
   = usePageState(recipe.value.slug);
 const { deactivateNavigationWarning } = useNavigationWarning();
+const { exitPath } = useRecipeExit(router, groupSlug);
+
+function exitRecipe() {
+  router.push(exitPath.value);
+}
 const notLinkedIngredients = computed(() => {
   return recipe.value.recipeIngredient.filter((ingredient) => {
     return !recipe.value.recipeInstructions.some(step =>
