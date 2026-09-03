@@ -221,6 +221,9 @@ task docker:prod        # Build and run production Docker compose
 - **Translation files:** Only modify `en-US` locale files - all other locales are managed by Crowdin
 - **Dev containers:** This project uses VS Code dev containers - leverage the pre-configured environment
 - **Task commands:** Use `task` commands instead of direct tool invocation for consistency
+- **Locale file path:** the English source locale is `frontend/app/lang/messages/en-US.json`, not `frontend/app/lang/locales/en-US.json` — only that file is hand-edited; every other `frontend/app/lang/messages/<locale>.json` is Crowdin-managed
+- **`pnpm` via corepack is broken here:** `devEngines.packageManager` (`{name:"pnpm",version:"11"}`) makes the corepack `pnpm` shim fail with "Invalid package manager specification ... expected a semver version". Use `npx --yes pnpm@latest <command>` instead (or any pnpm installed outside corepack)
+- **Frontend dev server API proxying:** `frontend/server/api/[...].ts` is a Nitro catch-all that proxies every `/api/**` request to `runtimeConfig.apiUrl` (default `http://localhost:9000`, override via the `API_URL` env var) — there is no separate Vite dev-proxy config. Point `API_URL` at a different backend (e.g. a staging gateway) to run `nuxt dev` against it
 
 ## Key Files to Reference
 
@@ -236,3 +239,10 @@ task docker:prod        # Build and run production Docker compose
 - [Documentation](https://docs.mealie.io/)
 - [Contributors Guide](https://nightly.mealie.io/contributors/developers-guide/code-contributions/)
 - [Discord](https://discord.gg/QuStdQGSGK)
+
+## Maintaining this file
+
+Keep this file for knowledge useful to almost every future agent session in this project.
+Do not repeat what the codebase already shows; point to the authoritative file or command instead.
+Prefer rewriting or pruning existing entries over appending new ones.
+When updating this file, preserve this bar for all agents and keep entries concise.
