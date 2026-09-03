@@ -92,7 +92,13 @@ test('primary Daycare workflow: login, plan, prep, shopping, recipe settings, re
 
   let openedRecipeSlug = '';
   await test.step('4. open a recipe from the Daycare prep card', async () => {
-    const openRecipeLink = page.getByRole('link', { name: 'Open Recipe', exact: true }).first();
+    // The recipe title itself is the link (DaycarePrepCard.vue) — its
+    // accessible name is the recipe's own name, not a fixed "Open Recipe"
+    // label, so scope by the shared title-link class instead. The
+    // Prepared Food inventory table uses the same class but its rows sit
+    // behind a collapsed v-expand-transition at this point in the flow,
+    // so .first() resolves to the prep card's link.
+    const openRecipeLink = page.locator('.daycare-recipe-title-link').first();
     const href = await openRecipeLink.getAttribute('href');
     openedRecipeSlug = href?.split('/r/')[1] ?? '';
     expect(openedRecipeSlug).not.toBe('');
