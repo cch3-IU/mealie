@@ -151,6 +151,29 @@ describe("DaycareLotEditDialog", () => {
     expect(wrapper.text()).toContain("Editing inventory isn't available yet");
   });
 
+  test("an invalid-portions resubmit after a stale 404 shows the validation message, not the stale unavailable message", async () => {
+    const updateLot = vi.fn(() => Promise.resolve({
+      data: null,
+      error: { status: 404, code: null, message: null, kind: "not-found" as const, details: null },
+    }));
+    const wrapper = mountDialog({ updateLot });
+
+    await wrapper.find(".submit").trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("Editing inventory isn't available yet");
+
+    const portionsInput = wrapper.find("input[type=\"number\"]");
+    await portionsInput.setValue("");
+
+    // submitOnEnter bypasses the disabled Save button and calls submitEvent unconditionally
+    // (see BaseDialog.vue), so emit "submit" directly rather than clicking the disabled button.
+    await wrapper.findComponent(BaseDialogStub).vm.$emit("submit");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Enter a portions amount of 0 or more.");
+    expect(wrapper.text()).not.toContain("Editing inventory isn't available yet");
+  });
+
   test("reopening the dialog resets a prior error state", async () => {
     const updateLot = vi.fn(() => Promise.resolve({
       data: null,
