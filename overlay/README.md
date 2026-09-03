@@ -25,6 +25,15 @@ reason.
   Recipes page when there's no such entry (e.g. a direct deep link).
   Intentionally does not use `document.referrer`.
 
+- `frontend/app/lib/api/types/daycare.ts` — hand-written TypeScript mirror of the sidecar's `/api/daycare/v1` Pydantic schemas. **Not** produced by Mealie's own `pydantic2ts` generator (that pipeline only walks `mealie/schema/*`) and deliberately **not** camelCased — the sidecar has no `alias_generator`, so field names match its raw snake_case JSON.
+- `frontend/app/lib/api/user/daycare.ts` (+ `daycare.test.ts`) — `DaycareAPI extends BaseAPI`, one method per sidecar route, attaching a fresh `Idempotency-Key` (UUID v4) to every mutating call per the sidecar's contract.
+- `frontend/app/composables/daycare/use-daycare.ts` (+ test) — the `useDaycare()` composable: per-resource loading/error/data state, permission helpers, `refresh()`, and request-then-refetch mutation helpers.
+- `frontend/app/composables/daycare/daycare-summary.ts` (+ test) — pure helpers deriving dashboard summaries (planned-meals split, recipes needing production, changed-since-plan/needs-review counts) from typed API responses.
+- `frontend/app/components/Domain/Daycare/*.vue` (+ matching `*.test.ts`) — the dashboard's presentational cards: `DaycareErrorState`, `DaycareWeekPicker`, `DaycarePlanCard`, `DaycarePrepCard`, `DaycareShoppingCard`, `DaycareInventoryCard`, `DaycareStatusCard`.
+- `frontend/app/tests/stub-vuetify.ts` — a shared Vuetify component stub set reused across the Daycare component tests (Vuetify isn't installed in the Vitest environment, so every component test stubs the Vuetify elements it renders; this collects the common ones instead of duplicating the same stub map in ~8 files).
+- `frontend/app/pages/g/[groupSlug]/daycare/index.vue` (+ test) — the dashboard page.
+- `frontend/app/pages/g/[groupSlug]/daycare/settings.vue` (+ test) — the admin-gated settings page.
+
 ## Modified upstream files
 
 ### Phase 9 — Recipe page back/X control (charter §7 Phase 9, §23.17)
@@ -35,5 +44,13 @@ reason.
 | `frontend/app/components/Domain/Recipe/RecipeActionMenu.vue` | Add a thumb-reachable X/back control, shown only in view mode (`!open`), that emits `exit`. |
 | `frontend/app/components/Domain/Recipe/RecipePage/RecipePage.vue` | Minimal wiring: compute the exit destination via `useRecipeExit` and `router.push` it on `@exit`. Does not touch the existing `closeEditor`/discard-dialog logic. |
 | `frontend/app/lang/messages/en-US.json` | Add the `general.back-to-recipes` string for the new control's label/tooltip. |
+
+### Phase 6 — Daycare dashboard, settings, and API integration
+
+| Upstream file | Reason |
+| --- | --- |
+| `frontend/app/lib/api/client-user.ts` | Registers the new `DaycareAPI` client (one import, one field, one constructor line) on `UserApiClient`, following the existing pattern used for every other domain client. |
+| `frontend/app/components/Layout/DefaultLayout.vue` | Adds one `topLinks` entry ("Daycare") immediately after "Meal Planner", `restricted: true` so it only shows for a signed-in household member in their own group. |
+| `frontend/app/lang/messages/en-US.json` | Adds the `daycare.*` translation keys (nav label, dashboard/settings copy, error fallback text). Note: this is the actual Crowdin-source locale file — the task brief's `frontend/app/lang/locales/en-US.json` path does not exist in this repo; only non-English locale files under `frontend/app/lang/messages/` are Crowdin-managed and must never be hand-edited. |
 
 Not touched: `DefaultLayout.vue`, Daycare nav/pages/client code — owned by a parallel lane.

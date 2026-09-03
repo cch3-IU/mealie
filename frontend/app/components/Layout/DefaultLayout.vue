@@ -243,6 +243,12 @@ const topLinks = computed<SideBarLink[]>(() => [
     restricted: true,
   },
   {
+    icon: $globals.icons.household,
+    title: i18n.t("daycare.daycare"),
+    to: `/g/${groupSlug.value}/daycare`,
+    restricted: true,
+  },
+  {
     icon: $globals.icons.formatListCheck,
     title: i18n.t("shopping-list.shopping-lists"),
     to: "/shopping-lists",
