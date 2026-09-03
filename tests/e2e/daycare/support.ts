@@ -43,7 +43,7 @@ export async function loginAsStagingAdmin(page: Page): Promise<void> {
  * render a "no plan yet" state for exactly this response) and the browser
  * logs a native "Failed to load resource" console.error for every failed
  * fetch regardless of whether the app handled it. Documented in
- * overlay/README.md "Daycare e2e console-error policy".
+ * overlay/README.md's Phase F4 section, `support.ts` entry.
  */
 const EXPECTED_EMPTY_WEEK_RESPONSE = /\/api\/daycare\/v1\/weeks\/\d{4}-\d{2}-\d{2}(\/(prep|shopping))?$/;
 

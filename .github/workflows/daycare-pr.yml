@@ -144,55 +144,55 @@ jobs:
           # always fails with "No eligible recipes for breakfast"; the
           # portions-per-batch settings unblock DaycarePrepCard's Mark Prep
           # Complete.
-          cat > "$R/config/daycare/overrides.yaml" <<'EOF'
-version: 1
-recipes:
-  apple-cinnamon-oat-bites:
-    classification:
-      uses:
-        breakfast: [main]
-  sunrise-oat-muffins:
-    classification:
-      uses:
-        breakfast: [main]
-  crunchy-chickpea-trail-mix:
-    classification:
-      uses:
-        snack: [main]
-  yogurt-parfait-cups:
-    classification:
-      uses:
-        snack: [main]
-EOF
-          cat > "$R/config/daycare/recipe_settings.yaml" <<'EOF'
-version: 1
-recipes:
-  apple-cinnamon-oat-bites:
-    daycare_portions_per_batch: 12
-  crunchy-chickpea-trail-mix:
-    daycare_portions_per_batch: 12
-  sunrise-oat-muffins:
-    daycare_portions_per_batch: 12
-  turkey-sweet-potato-skillet:
-    daycare_portions_per_batch: 8
-  yogurt-parfait-cups:
-    daycare_portions_per_batch: 12
-EOF
+          {
+            echo "version: 1"
+            echo "recipes:"
+            echo "  apple-cinnamon-oat-bites:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        breakfast: [main]"
+            echo "  sunrise-oat-muffins:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        breakfast: [main]"
+            echo "  crunchy-chickpea-trail-mix:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        snack: [main]"
+            echo "  yogurt-parfait-cups:"
+            echo "    classification:"
+            echo "      uses:"
+            echo "        snack: [main]"
+          } > "$R/config/daycare/overrides.yaml"
+          {
+            echo "version: 1"
+            echo "recipes:"
+            echo "  apple-cinnamon-oat-bites:"
+            echo "    daycare_portions_per_batch: 12"
+            echo "  crunchy-chickpea-trail-mix:"
+            echo "    daycare_portions_per_batch: 12"
+            echo "  sunrise-oat-muffins:"
+            echo "    daycare_portions_per_batch: 12"
+            echo "  turkey-sweet-potato-skillet:"
+            echo "    daycare_portions_per_batch: 8"
+            echo "  yogurt-parfait-cups:"
+            echo "    daycare_portions_per_batch: 12"
+          } > "$R/config/daycare/recipe_settings.yaml"
           # planner.yaml's defaults have no top-level "automation" key, so
           # appending one is safe. auto_publish_meal_plan lets the
           # dashboard's Regenerate button also publish to Mealie's native
           # Meal Planner (off by default; there is no UI toggle for it, per
           # the known defect above).
-          cat >> "$R/config/daycare/planner.yaml" <<'EOF'
-
-automation:
-  weekly_planning_enabled: false
-  planning_weekday: thursday
-  planning_time: "18:00"
-  timezone: UTC
-  auto_publish_meal_plan: true
-  auto_publish_shopping_list: false
-EOF
+          {
+            echo ""
+            echo "automation:"
+            echo "  weekly_planning_enabled: false"
+            echo "  planning_weekday: thursday"
+            echo "  planning_time: \"18:00\""
+            echo "  timezone: UTC"
+            echo "  auto_publish_meal_plan: true"
+            echo "  auto_publish_shopping_list: false"
+          } >> "$R/config/daycare/planner.yaml"
 
           DAYCARE_TAG=$(grep '^image_tag=' mealie-daycare-processor/deploy/.build-sidecar.digest | cut -d= -f2 | cut -d: -f2)
           {
