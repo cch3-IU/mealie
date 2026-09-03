@@ -137,31 +137,28 @@ describe("committedAtFromError", () => {
 describe("unlockPlanFromError", () => {
   test("returns null when there's no unlock_unsafe error", () => {
     expect(unlockPlanFromError(null)).toBeNull();
-    expect(unlockPlanFromError({ status: 409, code: "week_committed", message: null, kind: "conflict", details: { safe: false } })).toBeNull();
+    expect(unlockPlanFromError({ status: 409, code: "week_committed", message: null, kind: "conflict", details: { plan: { safe: false } } })).toBeNull();
   });
 
-  test("reads the plan out of an unlock_unsafe 409's details, defaulting missing arrays to empty", () => {
+  test("reads the plan out of an unlock_unsafe 409's details.plan (nested under a plan key, not spread into details)", () => {
+    const plan = {
+      week_start: "2026-01-05",
+      created_lots: [{ lot_id: 9, recipe_slug: "chicken-barley-soup", portions: 8, current_portions_remaining: 8, exists: true, touched: false, made_date: "2026-01-06", use_by: null, storage: "freezer" }],
+      consumed_source_lots: [],
+      missing_source_lot: false,
+      affected_reservations: [{ week_start: "2026-01-12", recipe_slug: "chicken-barley-soup", portions: 8 }],
+      affected_weeks: ["2026-01-12"],
+      safe: false,
+      reasons: ["Some of this week's prepared food has already been used"],
+    };
     const error = {
       status: 409,
       code: "unlock_unsafe" as const,
       message: "Unlocking this week isn't safe.",
       kind: "conflict" as const,
-      details: {
-        created_lots: [{ id: 9 }],
-        reservations_released: [{ week: "2026-01-12", recipe: "Chicken Barley Soup", portions: 8 }],
-        downstream_weeks_marked_stale: ["2026-01-12"],
-        safe: false,
-        reasons: ["Some of this week's prepared food has already been used"],
-      },
+      details: { week_start: "2026-01-05", plan },
     };
-    expect(unlockPlanFromError(error)).toEqual({
-      created_lots: [{ id: 9 }],
-      consumed_lots_restored: [],
-      reservations_released: [{ week: "2026-01-12", recipe: "Chicken Barley Soup", portions: 8 }],
-      downstream_weeks_marked_stale: ["2026-01-12"],
-      safe: false,
-      reasons: ["Some of this week's prepared food has already been used"],
-    });
+    expect(unlockPlanFromError(error)).toEqual(plan);
   });
 });
 
@@ -456,7 +453,7 @@ describe("useDaycare mutations", () => {
 
   test("getUnlockPreview is a plain read that never refetches other resources", async () => {
     resetMocks();
-    daycareApi.getUnlockPreview.mockResolvedValue(ok({ created_lots: [], consumed_lots_restored: [], reservations_released: [], downstream_weeks_marked_stale: [], safe: true, reasons: [] }));
+    daycareApi.getUnlockPreview.mockResolvedValue(ok({ week_start: "2026-01-05", created_lots: [], consumed_source_lots: [], missing_source_lot: false, affected_reservations: [], affected_weeks: [], safe: true, reasons: [] }));
     const daycare = useDaycare({ week: "2026-01-05" });
     await daycare.refresh();
     daycareApi.getWeek.mockClear();
@@ -478,11 +475,11 @@ describe("useDaycare mutations", () => {
     daycareApi.getPrep.mockClear();
     daycareApi.getShopping.mockClear();
 
-    const result = await daycare.unlockWeek({ reason: null, force: false }, "44444444-4444-4444-8444-444444444444");
+    const result = await daycare.unlockWeek({ reason: "Routine unlock", force: false }, "44444444-4444-4444-8444-444444444444");
 
     expect(daycareApi.unlockWeek).toHaveBeenCalledWith(
       "2026-01-05",
-      { reason: null, force: false },
+      { reason: "Routine unlock", force: false },
       { headers: { "Idempotency-Key": "44444444-4444-4444-8444-444444444444" } },
     );
     expect(daycareApi.getWeek).toHaveBeenCalledTimes(1);
@@ -498,7 +495,7 @@ describe("useDaycare mutations", () => {
       error: {
         response: {
           status: 409,
-          data: { error: { code: "unlock_unsafe", message: "Unlocking this week isn't safe.", details: { safe: false, reasons: ["food already used"] } } },
+          data: { error: { code: "unlock_unsafe", message: "Unlocking this week isn't safe.", details: { week_start: "2026-01-05", plan: { safe: false, reasons: ["food already used"] } } } },
         },
       },
     });
@@ -506,7 +503,7 @@ describe("useDaycare mutations", () => {
     await daycare.refresh();
     daycareApi.getWeek.mockClear();
 
-    const result = await daycare.unlockWeek({ reason: null, force: false });
+    const result = await daycare.unlockWeek({ reason: "Routine unlock", force: false });
 
     expect(result.data).toBeNull();
     expect(result.error?.code).toEqual("unlock_unsafe");

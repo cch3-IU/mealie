@@ -545,23 +545,47 @@ export interface UnlockAvailability {
   reasons: string[];
 }
 
-export interface UnlockReservationRelease {
-  week: string;
-  recipe: string;
+export interface UnlockCreatedLot {
+  lot_id: number;
+  recipe_slug: string;
+  portions: number;
+  /** null if the lot no longer exists. */
+  current_portions_remaining: number | null;
+  exists: boolean;
+  /** The lot was consumed, edited, or deleted since completion. */
+  touched: boolean;
+  made_date: string | null;
+  use_by: string | null;
+  storage: string | null;
+}
+
+export interface UnlockSourceLot {
+  lot_id: number;
+  recipe_slug: string | null;
+  portions: number;
+  exists: boolean;
+}
+
+export interface UnlockReservationRow {
+  week_start: string;
+  recipe_slug: string;
   portions: number;
 }
 
-/**
- * `created_lots`/`consumed_lots_restored` entries are typed loosely (mirrors
- * `UndoResult.restored_source_lots` above) since the contract only pins down
- * `reservations_released`'s shape; the dialog reads an optional `portions`
- * field defensively rather than assuming every lot entry carries one.
- */
 export interface UnlockPlan {
-  created_lots: Record<string, unknown>[];
-  consumed_lots_restored: Record<string, unknown>[];
-  reservations_released: UnlockReservationRelease[];
-  downstream_weeks_marked_stale: string[];
+  week_start: string;
+  /** Leftover lots this completion created. */
+  created_lots: UnlockCreatedLot[];
+  /** Pre-existing lots this completion drew down. */
+  consumed_source_lots: UnlockSourceLot[];
+  /**
+   * A consumed source lot no longer exists; unlock always refuses (even with force) rather
+   * than drop those portions — when true, the dialog must not offer a force retry at all.
+   */
+  missing_source_lot: boolean;
+  /** Later-week reservations backed by the created lots. */
+  affected_reservations: UnlockReservationRow[];
+  affected_weeks: string[];
   safe: boolean;
   reasons: string[];
 }
@@ -569,25 +593,25 @@ export interface UnlockPlan {
 export type UnlockPreview = UnlockPlan;
 
 export interface UnlockRequest {
-  reason?: string | null;
+  /** Required and non-blank — the sidecar 422s a missing field and 400s a blank one (`unlock_reason_required`). */
+  reason: string;
   force?: boolean;
 }
 
-/**
- * Shape assumed to echo `UnlockPlan`'s fields plus what-actually-happened fields; the sidecar's
- * exact receipt schema isn't confirmed yet (see overlay/README.md's Phase F8 entry), so every
- * plan-shaped field here is optional and the dialog must render "detail unavailable" rather than
- * crash if the real receipt omits one — mirrors `CommitReceipt.completion_preview?` below.
- */
 export interface UnlockReceipt {
+  schema_version: number;
   week_start: string;
   unlocked_at: string;
-  reason?: string | null;
-  forced?: boolean;
-  created_lots?: Record<string, unknown>[];
-  consumed_lots_restored?: Record<string, unknown>[];
-  reservations_released?: UnlockReservationRelease[];
-  downstream_weeks_marked_stale?: string[];
+  reason: string;
+  admin_user: string | null;
+  forced: boolean;
+  deleted_leftover_lot_ids: number[];
+  restored_source_lots: { lot_id: number; portions: number }[];
+  released_reservations: UnlockReservationRow[];
+  affected_weeks: string[];
+  downstream_weeks_marked_stale: string[];
+  /** Present on the sidecar's Artifact-typed response (extra="allow"); added post-hoc by the service, not modeled in `UnlockResult`. */
+  receipt_path?: string | null;
 }
 
 // ---------------------------------------------------------------------------

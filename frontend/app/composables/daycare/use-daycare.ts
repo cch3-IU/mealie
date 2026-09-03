@@ -85,30 +85,16 @@ export function committedAtFromError(error: DaycareUiError | null): string | nul
 }
 
 /**
- * The unlock plan carried in a 409 `unlock_unsafe` response's `details` — the sidecar
- * sends the same shape as `GET .../unlock-preview` when a `force: false` unlock is
- * refused, so a dialog can refresh to the latest known state without a second read.
+ * The unlock plan carried in a 409 `unlock_unsafe` response's `details.plan` — nested under
+ * a `plan` key (`{week_start, details: {week_start, plan: {...}}}`), not spread directly into
+ * `details`. The sidecar sends the exact `GET .../unlock-preview` (`UnlockPlan`) shape there, so
+ * a dialog can adopt the latest known state without a second read.
  */
 export function unlockPlanFromError(error: DaycareUiError | null): UnlockPlan | null {
   if (!error || error.code !== "unlock_unsafe" || !error.details) return null;
-  const details = error.details;
-  const createdLots = Array.isArray(details.created_lots) ? details.created_lots as Record<string, unknown>[] : [];
-  const consumedLotsRestored = Array.isArray(details.consumed_lots_restored) ? details.consumed_lots_restored as Record<string, unknown>[] : [];
-  const reservationsReleased = Array.isArray(details.reservations_released) ? details.reservations_released as UnlockPlan["reservations_released"] : [];
-  const downstreamWeeksMarkedStale = Array.isArray(details.downstream_weeks_marked_stale)
-    ? (details.downstream_weeks_marked_stale as unknown[]).filter((w): w is string => typeof w === "string")
-    : [];
-  const reasons = Array.isArray(details.reasons)
-    ? (details.reasons as unknown[]).filter((r): r is string => typeof r === "string")
-    : [];
-  return {
-    created_lots: createdLots,
-    consumed_lots_restored: consumedLotsRestored,
-    reservations_released: reservationsReleased,
-    downstream_weeks_marked_stale: downstreamWeeksMarkedStale,
-    safe: typeof details.safe === "boolean" ? details.safe : false,
-    reasons,
-  };
+  const plan = error.details.plan;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) return null;
+  return plan as UnlockPlan;
 }
 
 const WEEKDAY_ORDER: Weekday[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];

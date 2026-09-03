@@ -12,10 +12,22 @@ const BaseDialogStub = {
 
 function safePreviewFixture(overrides: Partial<UnlockPreview> = {}): UnlockPreview {
   return {
-    created_lots: [{ id: 9, portions: 8 }],
-    consumed_lots_restored: [],
-    reservations_released: [{ week: "2026-01-12", recipe: "Chicken Barley Soup", portions: 8 }],
-    downstream_weeks_marked_stale: ["2026-01-12"],
+    week_start: "2026-01-05",
+    created_lots: [{
+      lot_id: 9,
+      recipe_slug: "chicken-barley-soup",
+      portions: 8,
+      current_portions_remaining: 8,
+      exists: true,
+      touched: false,
+      made_date: "2026-01-06",
+      use_by: "2026-02-06",
+      storage: "freezer",
+    }],
+    consumed_source_lots: [],
+    missing_source_lot: false,
+    affected_reservations: [{ week_start: "2026-01-12", recipe_slug: "chicken-barley-soup", portions: 8 }],
+    affected_weeks: ["2026-01-12"],
     safe: true,
     reasons: [],
     ...overrides,
@@ -30,18 +42,27 @@ function unsafePreviewFixture(overrides: Partial<UnlockPreview> = {}): UnlockPre
   });
 }
 
+function refusedPreviewFixture(overrides: Partial<UnlockPreview> = {}): UnlockPreview {
+  return unsafePreviewFixture({
+    missing_source_lot: true,
+    reasons: ["A source lot consumed by this completion no longer exists, so it cannot be restored exactly."],
+    ...overrides,
+  });
+}
+
 function receiptFixture(overrides: Partial<UnlockReceipt> = {}): UnlockReceipt {
   return {
+    schema_version: 1,
     week_start: "2026-01-05",
     unlocked_at: "2026-01-07T12:00:00Z",
-    reason: null,
+    reason: "Routine unlock",
+    admin_user: "admin",
     forced: false,
-    created_lots: [{ id: 9 }],
-    consumed_lots_restored: [],
-    reservations_released: [{ week: "2026-01-12", recipe: "Chicken Barley Soup", portions: 8 }],
+    deleted_leftover_lot_ids: [9],
+    restored_source_lots: [],
+    released_reservations: [{ week_start: "2026-01-12", recipe_slug: "chicken-barley-soup", portions: 8 }],
+    affected_weeks: ["2026-01-12"],
     downstream_weeks_marked_stale: ["2026-01-12"],
-    safe: true,
-    reasons: [],
     ...overrides,
   };
 }
@@ -63,7 +84,7 @@ function mountDialog(props: Partial<InstanceType<typeof DaycareUnlockDialog>["$p
 }
 
 describe("DaycareUnlockDialog preview", () => {
-  test("fetches and renders the unlock preview in plain words when opened, with the portions each lot carries", async () => {
+  test("fetches and renders the unlock preview in plain words, with the portions each lot carries", async () => {
     const wrapper = mountDialog();
     await flushPromises();
 
@@ -72,23 +93,17 @@ describe("DaycareUnlockDialog preview", () => {
     expect(wrapper.text()).toContain("2026-01-12");
   });
 
-  test("falls back to a bare count when a lot entry carries no portions figure", async () => {
-    const preview = safePreviewFixture({ created_lots: [{ id: 9 }, { id: 10 }] });
-    const wrapper = mountDialog({ getUnlockPreview: vi.fn(() => Promise.resolve({ data: preview, error: null })) });
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("2 prepared-food lots from this completion will be removed.");
-    expect(wrapper.text()).not.toContain("portions total");
-  });
-
-  test("a safe plan enables a single Confirm with no reason/acknowledgement required", async () => {
+  test("a reason is always required, even for a safe plan — no checkbox, but Confirm stays disabled until typed", async () => {
     const wrapper = mountDialog({ getUnlockPreview: vi.fn(() => Promise.resolve({ data: safePreviewFixture(), error: null })) });
     await flushPromises();
 
+    expect(wrapper.find("input[type=checkbox]").exists()).toBe(false);
     const submit = wrapper.find(".submit");
     expect(submit.exists()).toBe(true);
-    expect(submit.attributes("disabled")).toBeUndefined();
-    expect(wrapper.find("textarea").exists()).toBe(false);
+    expect(submit.attributes("disabled")).toBeDefined();
+
+    await wrapper.find("textarea").setValue("Routine unlock");
+    expect(wrapper.find(".submit").attributes("disabled")).toBeUndefined();
   });
 
   test("an unsafe plan shows the reasons and disables Confirm until a reason and acknowledgement are given", async () => {
@@ -106,6 +121,17 @@ describe("DaycareUnlockDialog preview", () => {
     expect(wrapper.find(".submit").attributes("disabled")).toBeUndefined();
   });
 
+  test("a permanently-refused plan (a source lot no longer exists) shows the reasons and offers no way to submit, even forced", async () => {
+    const wrapper = mountDialog({ getUnlockPreview: vi.fn(() => Promise.resolve({ data: refusedPreviewFixture(), error: null })) });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("can't be unlocked");
+    expect(wrapper.text()).toContain("no longer exists");
+    expect(wrapper.find(".submit").exists()).toBe(false);
+    expect(wrapper.find("textarea").exists()).toBe(false);
+    expect(wrapper.find("input[type=checkbox]").exists()).toBe(false);
+  });
+
   test("shows a not-available message on a bare 404/405", async () => {
     const getUnlockPreview = vi.fn(() => Promise.resolve({ data: null, error: daycareError({ status: 404 }) }));
     const wrapper = mountDialog({ getUnlockPreview });
@@ -117,44 +143,37 @@ describe("DaycareUnlockDialog preview", () => {
 });
 
 describe("DaycareUnlockDialog confirm — safe plan", () => {
-  test("confirming a safe plan unlocks without force and shows the receipt", async () => {
+  test("confirming a safe plan sends force:false with the typed reason, and shows the receipt", async () => {
     const unlockWeek = vi.fn(() => Promise.resolve({ data: receiptFixture(), error: null }));
     const wrapper = mountDialog({ unlockWeek });
     await flushPromises();
 
+    await wrapper.find("textarea").setValue("Routine unlock");
     await wrapper.find(".submit").trigger("click");
     await flushPromises();
 
     expect(unlockWeek).toHaveBeenCalledTimes(1);
     const [payload, key] = unlockWeek.mock.calls[0];
-    expect(payload).toEqual({ reason: null, force: false });
+    expect(payload).toEqual({ reason: "Routine unlock", force: false });
     expect(key).toMatch(/^[0-9a-f-]{36}$/i);
     expect(wrapper.emitted("unlocked")).toHaveLength(1);
     expect(wrapper.text()).toContain("unlocked");
   });
 
-  test("shows a prompt naming the downstream weeks that need regenerating after a successful unlock", async () => {
-    const wrapper = mountDialog();
-    await flushPromises();
-    await wrapper.find(".submit").trigger("click");
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("2026-01-12");
-  });
-
-  test("shows a detail-unavailable note instead of crashing when the receipt omits the plan-shaped fields entirely", async () => {
+  test("shows counts of lots removed/restored and a prompt naming the downstream weeks that need regenerating", async () => {
     const unlockWeek = vi.fn(() => Promise.resolve({
-      data: { week_start: "2026-01-05", unlocked_at: "2026-01-07T12:00:00Z" },
+      data: receiptFixture({ deleted_leftover_lot_ids: [9, 10], restored_source_lots: [{ lot_id: 3, portions: 4 }] }),
       error: null,
     }));
     const wrapper = mountDialog({ unlockWeek });
     await flushPromises();
-
+    await wrapper.find("textarea").setValue("Routine unlock");
     await wrapper.find(".submit").trigger("click");
     await flushPromises();
 
-    expect(wrapper.text()).toContain("Receipt detail isn't available");
-    expect(wrapper.emitted("unlocked")).toHaveLength(1);
+    expect(wrapper.text()).toContain("2 prepared-food lots from this completion were removed.");
+    expect(wrapper.text()).toContain("1 consumed lot will be restored (4 portions).");
+    expect(wrapper.text()).toContain("2026-01-12");
   });
 });
 
@@ -178,7 +197,7 @@ describe("DaycareUnlockDialog confirm — unsafe plan", () => {
     expect(wrapper.emitted("unlocked")).toHaveLength(1);
   });
 
-  test("a fresh unlock_unsafe 409 on confirm refreshes the plan, keeps asking for reason/acknowledgement, and a retry mints a new key", async () => {
+  test("a fresh unlock_unsafe 409 on confirm adopts the plan from details.plan, keeps asking for reason/acknowledgement, and a retry mints a new key", async () => {
     const unlockWeek = vi.fn();
     unlockWeek.mockResolvedValueOnce({
       data: null,
@@ -186,14 +205,7 @@ describe("DaycareUnlockDialog confirm — unsafe plan", () => {
         status: 409,
         code: "unlock_unsafe",
         message: "Unlocking this week isn't safe.",
-        details: {
-          created_lots: [{ id: 9 }],
-          consumed_lots_restored: [],
-          reservations_released: [],
-          downstream_weeks_marked_stale: [],
-          safe: false,
-          reasons: ["Even more food has since been used"],
-        },
+        details: { week_start: "2026-01-05", plan: unsafePreviewFixture({ reasons: ["Even more food has since been used"] }) },
       }),
     });
     unlockWeek.mockResolvedValueOnce({ data: receiptFixture({ forced: true, reason: "Correcting a mistake" }), error: null });
@@ -222,6 +234,29 @@ describe("DaycareUnlockDialog confirm — unsafe plan", () => {
     expect(secondKey).not.toEqual(firstKey);
     expect(wrapper.emitted("unlocked")).toHaveLength(1);
   });
+
+  test("a fresh unlock_unsafe 409 that now reports missing_source_lot switches to the permanently-refused state", async () => {
+    const unlockWeek = vi.fn(() => Promise.resolve({
+      data: null,
+      error: daycareError({
+        status: 409,
+        code: "unlock_unsafe",
+        details: { week_start: "2026-01-05", plan: refusedPreviewFixture() },
+      }),
+    }));
+    const wrapper = mountDialog({
+      getUnlockPreview: vi.fn(() => Promise.resolve({ data: unsafePreviewFixture(), error: null })),
+      unlockWeek,
+    });
+    await flushPromises();
+    await wrapper.find("textarea").setValue("Correcting a mistake");
+    await wrapper.find("input[type=checkbox]").setValue(true);
+    await wrapper.find(".submit").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("can't be unlocked");
+    expect(wrapper.find(".submit").exists()).toBe(false);
+  });
 });
 
 describe("DaycareUnlockDialog idempotent replay", () => {
@@ -230,12 +265,14 @@ describe("DaycareUnlockDialog idempotent replay", () => {
     const unlockWeek = vi.fn(() => Promise.resolve({ data: receipt, error: null }));
     const first = mountDialog({ unlockWeek });
     await flushPromises();
+    await first.find("textarea").setValue("Routine unlock");
     await first.find(".submit").trigger("click");
     await flushPromises();
     const firstText = first.text();
 
     const second = mountDialog({ unlockWeek });
     await flushPromises();
+    await second.find("textarea").setValue("Routine unlock");
     await second.find(".submit").trigger("click");
     await flushPromises();
 

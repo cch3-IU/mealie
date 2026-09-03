@@ -177,7 +177,7 @@ describe("DaycarePlanCard", () => {
 
   test("clicking Unlock Week opens the unlock dialog, which loads its preview", async () => {
     const getUnlockPreview = vi.fn(() => Promise.resolve({
-      data: { created_lots: [], consumed_lots_restored: [], reservations_released: [], downstream_weeks_marked_stale: [], safe: true, reasons: [] },
+      data: { week_start: "2026-01-05", created_lots: [], consumed_source_lots: [], missing_source_lot: false, affected_reservations: [], affected_weeks: [], safe: true, reasons: [] },
       error: null,
     }));
     const wrapper = mountCard({
