@@ -110,8 +110,8 @@ touch-target override) shrinks its hit area to Vuetify's own `size="small"`
 sizing — the same as its neighbours. That's the intended effect of "no
 custom CSS unless the neighbours have it"; the brief's "thumb-reachable"
 requirement is about position (far right, clear of the overflow menu),
-which the mobile screenshot below confirms, not about a larger-than-sibling
-touch target.
+confirmed via the PR's attached 390×844 mobile screenshots, not about a
+larger-than-sibling touch target.
 
 Net effect on this file's patch surface versus upstream: it shrinks — the
 control moved out of the untouched-upstream region before `v-spacer` into
