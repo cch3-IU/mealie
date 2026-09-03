@@ -19,6 +19,18 @@ reason.
   Docker). Backend tests are intentionally skipped — this fork never changes
   backend Python. No upstream workflow file is edited.
 
+  **`daycare-image-build` job** (charter §16 "End-to-end browser test";
+  runs automatically on every PR/push): builds `custom-mealie` from this
+  checkout's HEAD with the upstream `docker/Dockerfile`, `push: false`,
+  `load: true` — proves the custom image still builds without publishing
+  anywhere. No `packages` build-context override (unlike upstream's own
+  `e2e.yml`) — the Dockerfile's `packages` stage self-builds the wheel from
+  this checkout, matching how `deploy/build-mealie.sh` builds it, so this
+  job needs no separate "build the Python package first" job.
+
+  **`daycare-e2e` job — manual only (`workflow_dispatch`), see "Daycare e2e
+  CI" below.**
+
 - `frontend/app/composables/use-recipe-exit.ts` — holds the last visited
   recipe-list route (`/g/{groupSlug}` with its query/filter state) for this
   session, so the exit control can return to it, falling back to the group's
@@ -74,6 +86,196 @@ reason.
 | `frontend/app/lib/api/client-user.ts` | Registers the new `DaycareAPI` client (one import, one field, one constructor line) on `UserApiClient`, following the existing pattern used for every other domain client. |
 | `frontend/app/components/Layout/DefaultLayout.vue` | Adds one `topLinks` entry ("Daycare") immediately after "Meal Planner", `restricted: true` so it only shows for a signed-in household member in their own group. |
 | `frontend/app/lang/messages/en-US.json` | Adds the `daycare.*` translation keys (nav label, dashboard/settings copy, error fallback text). Note: this is the actual Crowdin-source locale file — the task brief's `frontend/app/lang/locales/en-US.json` path does not exist in this repo; only non-English locale files under `frontend/app/lang/messages/` are Crowdin-managed and must never be hand-edited. |
+
+### Phase F4 — End-to-end browser test and custom-image CI (charter §16 "End-to-end browser test", §16 "Upgrade/rebase test", §23.21)
+
+| Upstream file | Reason |
+| --- | --- |
+| `tests/e2e/playwright.config.ts` | Adds two new projects (`Daycare Mobile Safari`, `Daycare Desktop Chrome`) scoped to `tests/e2e/daycare/**` via `testDir` + `testMatch`; the existing `chromium`/`firefox`/`webkit` project blocks are byte-for-byte unchanged. Scoping is done entirely by project config plus the `*.dc-spec.ts` filename convention (not by a top-level `testIgnore`, which would need reasoning about Playwright's project/top-level option-inheritance rules that isn't worth the risk) — verified with `playwright test --list` that daycare specs run exactly twice (once per new project) and `login.spec.ts`/`oidc-native.spec.ts` still run under all three original projects, zero overlap either direction. |
+
+New files, not upstream (`tests/e2e/daycare/**`):
+
+- `tests/e2e/daycare/primary-workflow.dc-spec.ts` — one sequential Playwright
+  test (charter's 9-step flow, in order, via `test.step()`) rather than nine
+  independent tests, because most steps depend on state the previous step
+  created: the recipe opened in step 4 is the one edited in step 7; the
+  current week regenerated in step 3 is the one whose prep is marked
+  complete in step 9. Runs on two projects (`Daycare Mobile Safari` /
+  `Daycare Desktop Chrome`, see the `playwright.config.ts` entry below) —
+  same spec, real iPhone-class and desktop viewports. Captures a numbered
+  screenshot per step as a Playwright test attachment and asserts no
+  unexpected console/page errors or unexplained HTTP failures across the
+  whole flow (see `support.ts` below for the exact allow-list). Both
+  projects share one real calendar week (`daycare.dashboard`'s "current
+  week", computed from wall-clock date) when run together in one suite
+  invocation, so steps 3, 6, and 9 each check observed state (already
+  committed / already published) before attempting a mutation, rather than
+  assuming a blank slate — the sidecar correctly 409s a second attempt to
+  regenerate or re-publish a week the other project's run already
+  committed, and a naive test would misread that correct refusal as a
+  failure.
+- `tests/e2e/daycare/support.ts` — shared helpers: `loginAsStagingAdmin`
+  (handles Mealie's one-time "admin setup wizard" skip link, present only
+  after the very first login against a fresh database), `attachConsoleGuard`
+  (the console/response-error allow-list: benign empty-week 404s from the
+  dashboard's own eager fetch, the WebKit-headless "Wake Lock permission
+  request denied" `pageerror` that has nothing to do with Daycare, and the
+  one documented known-defect 500 below — anything else fails the guard),
+  and `createScreenshotStep` (per-test numbered screenshot attachments).
+
+**Playwright/WebKit nav-drawer quirk (mobile project only):** on the
+iPhone-class viewport, clicking the "Daycare" nav-drawer link via
+Playwright's normal `.click()` fails with "element is outside of the
+viewport" — confirmed by direct `boundingBox()` inspection to be false: the
+link's measured box (`y:321, height:44`) sits comfortably inside the
+390×664 viewport, and the drawer needs no scrolling at all
+(`scrollHeight === clientHeight`). `force:true` does not help either — the
+same bound is enforced at WebKit's input-dispatch layer, not just
+Playwright's actionability wait. Worked around in `openDaycareFromNav()` by
+dispatching a plain DOM `.click()` via `locator.evaluate()`, which still
+exercises the real `<a href>` / Vue Router navigation while sidestepping
+Playwright/WebKit's coordinate-based click dispatch. Chromium is unaffected.
+
+**Known defect: recipe-daycare writes fail against the individual-file
+config bind mount.** Every write to a recipe's daycare settings or
+classification override — `PUT /api/daycare/v1/recipes/{slug}/daycare`,
+exercised by the recipe-page edit form (Phase 6/frontend patch point) — and
+every write to `PUT /api/daycare/v1/settings` (the Daycare Settings page's
+automation toggles, including `auto_publish_meal_plan`) returns `500
+internal_error` when run against `deploy/compose.yaml`'s actual deployment
+topology. Root cause, confirmed live against the rehearsal stack (sidecar
+container logs): the sidecar's `atomic_write_yaml` (`daycare_processor/
+atomic.py`) writes via a temp file plus `os.replace(tmp, path)` for an
+atomic swap, but `deploy/compose.yaml` binds `recipe_settings.yaml` and
+`overrides.yaml` (and `planner.yaml`, for the settings PUT) as *individual*
+files, each its own bind-mount point (confirmed via
+`mount | grep overrides` inside the container: `/dev/sdd on
+/app/config/overrides.yaml type ext4`). `os.replace()` cannot atomically
+replace a path that is itself a distinct mount point — the kernel refuses
+with `OSError: [Errno 16] Device or resource busy`. This is a **new**
+finding, distinct from the already-documented "whole-directory bind would
+shadow baked-in static files" constraint in `deploy/README.md` "Config
+mount" — that section explains why the four files are bound individually
+in the first place; this defect is a consequence of that same individual
+binding colliding with the sidecar's own atomic-write pattern, not
+previously exercised against a live gateway before this lane's rehearsal.
+This blocks charter completion criteria §23.9 ("Recipe-specific daycare
+settings can be viewed/edited in Mealie") and §23.10 ("Global planner
+settings can be edited through Mealie by authorized users") outright — as
+deployed, *no* Daycare setting can be saved through the UI at all. Filed as
+a note to firstmate in the sidecar repo's `docs/FOLLOWUPS.md`
+(`blocked:` — it blocks charter §23.9/§23.10, out of this lane's file
+ownership to fix: the fix is either a sidecar `src/` change — write mutable
+config through a directory the compose file binds as a whole, per the
+already-recorded follow-up in `deploy/README.md`'s own "Config mount" —
+or a `deploy/compose.yaml` change, both outside `tests/e2e/**` /
+`playwright.config.ts` / this workflow file / this doc). `primary-
+workflow.dc-spec.ts`'s step 7 exercises the real UI edit and asserts the
+**current** (broken) behavior on purpose — a `500`/"An internal error
+occurred." toast — rather than skipping the step, so the test starts
+failing loudly the moment this is fixed, which is the signal to flip that
+one assertion back to "persists". `attachConsoleGuard`'s allow-list tracks
+this one exact known-defect response (`PUT .../recipes/{slug}/daycare` →
+`500`) rather than silently ignoring all errors, so a genuinely new failure
+elsewhere still fails the suite.
+
+**Rehearsal-only config workaround (setup, not part of the flow under
+test):** the stub LLM classifier (`LLM_PROVIDER=stub`) deterministically
+assigns every fixture recipe to `lunch`/`main` — it reads no recipe content
+for slot assignment, per its own docstring ("placeholders, not
+judgements"). Weekly regeneration therefore always fails
+(`409 planning_failed`, `"No eligible recipes for breakfast"`) against an
+unmodified fixture set, and `DaycarePrepCard`'s "Mark Prep Complete" stays
+blocked on "batch size is not calibrated" without a
+`daycare_portions_per_batch` value. Both the known defect above (writes
+broken) *and* the charter's hard rule against giving the frontend a second
+mutation path make fixing this by calling the sidecar API a non-option, so
+`overrides.yaml`, `recipe_settings.yaml`, and `planner.yaml`
+(`automation.auto_publish_meal_plan: true` — off by default, and there is
+no other way to turn it on given the known defect above) are pre-seeded
+directly on the host before the sidecar container's first start (the same
+mechanism `deploy/README.md` "First start" step 3 already documents for a
+from-scratch install) rather than through the API. See the `daycare-e2e`
+job in `.github/workflows/daycare-pr.yml` for the exact file contents used
+in CI, or the "E2E rehearsal" section below for the equivalent local
+sequence.
+
+## Daycare e2e CI
+
+The `daycare-e2e` job in `.github/workflows/daycare-pr.yml` is
+`workflow_dispatch`-only (run it by hand from the Actions tab), not
+automatic on every PR, for one concrete reason: **it needs a second,
+private repository checked out** — `cch3-IU/mealie-daycare-processor`, for
+`deploy/compose.yaml`, `deploy/build-sidecar.sh`, and
+`dev/staging/fixtures` — via `actions/checkout` with `secrets.
+DAYCARE_SIDECAR_PAT`, a cross-repo PAT this fork's default `GITHUB_TOKEN`
+cannot provide (`GITHUB_TOKEN` is scoped to the repository the workflow
+runs in). That secret does not exist in this fork yet; add it (a
+fine-grained PAT with read access to `cch3-IU/mealie-daycare-processor`)
+before the first manual run. This is a hard blocker on automatic
+triggering, not a time-budget judgment call — the image-build job above
+covers the part of charter §16 that *can* run on every PR.
+
+When run, the job: builds `custom-mealie` from this checkout's HEAD and
+`daycare-processor` from the sidecar checkout
+(`deploy/build-sidecar.sh --allow-dirty`, since a CI checkout of a
+just-cloned repo has no meaningful "clean working tree" concept to
+protect); brings up `deploy/compose.yaml` + `deploy/compose.rehearsal.yaml`
+on `127.0.0.1:29931` with a throwaway `$GITHUB_WORKSPACE/rehearsal`
+data/config directory (never `dev/staging`, never production, never port
+9925); mints a fresh Mealie service-account token and seeds the 11
+`dev/staging/fixtures/recipes/*.json` recipes via `dev/staging/seed.sh`
+pointed at the gateway; runs one full processing poll (`full: true`) plus,
+after the sidecar's `quiet_seconds` debounce (120s default — see
+`docs/OPERATIONS.md` §8), a second poll (`full: false`) to actually
+classify them; runs both Playwright projects; uploads the HTML report as a
+workflow artifact; and tears the stack down (`down --volumes`) whether or
+not the suite passed.
+
+## E2E rehearsal (2026-09-03, this lane)
+
+Run against a throwaway `deploy/compose.yaml` + `deploy/compose.rehearsal.yaml`
+stack on `127.0.0.1:29931`, built from this checkout's HEAD and a `git
+clone --shared` of the sidecar repo into `.scratch/mealie-daycare-processor`
+(gitignored) inside this worktree — never `dev/staging` directly (shared,
+fixed ports, may be held by another lane), never production, never port
+9925. `custom-mealie:v3.25.0-daycare-<sha>` built via a direct
+`docker build -f docker/Dockerfile .` from this checkout (not
+`deploy/build-mealie.sh`, which clones from GitHub and so cannot see an
+unpushed branch); `daycare-processor` built via the sidecar's own
+`deploy/build-sidecar.sh`. Seeded via `dev/staging/seed.sh` pointed at the
+rehearsal gateway (`MEALIE_URL=http://127.0.0.1:29931`), plus the
+rehearsal-only config workaround described above.
+
+**Local execution note:** this host's Ubuntu release (26.04) is newer than
+Playwright 1.60's supported-OS table (max `ubuntu24.04`) and this session
+has no passwordless `sudo`, so `playwright install --with-deps` cannot
+install browser system dependencies here directly. Ran the suite instead
+inside the official `mcr.microsoft.com/playwright:v1.60.0-noble` Docker
+image (`docker run --network host -v tests/e2e:/e2e ... npx playwright
+test`), which bundles matching browsers and all system dependencies — this
+is also a reasonable pattern for anyone else hitting the same host
+constraint locally; GitHub-hosted CI runners are on a supported Ubuntu and
+need no such workaround.
+
+**Final clean run (fresh stack, single invocation, no retries), both
+projects together:**
+
+| Metric | Result |
+| --- | --- |
+| `Daycare Desktop Chrome` › primary-workflow | passed, 1 attempt |
+| `Daycare Mobile Safari` › primary-workflow | passed, 1 attempt |
+| Total wall time (both projects, one worker, includes step 7's known-defect assertion) | 43.7s |
+| Screenshots captured | 9 per project (18 total), attached to the Playwright HTML report |
+| Console/page-error guard | clean (0 unexpected) on both projects |
+
+Getting to a clean single-invocation run took several iterations, most
+instructively: the mobile-project WebKit nav-drawer quirk above, and — the
+main structural lesson — steps 3/6/9 needed to check observed committed/
+published state before mutating, once it became clear both projects
+legitimately race for the same real-world "current week" when run together
+against one shared stack (see the `primary-workflow.dc-spec.ts` bullet
+above).
 
 ## Development notes
 
