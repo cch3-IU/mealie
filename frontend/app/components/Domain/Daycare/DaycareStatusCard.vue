@@ -65,7 +65,7 @@ const warnings = computed(() => {
   const list = [...(props.week?.warnings ?? [])];
   const deadLettered = props.processing?.processing.counts.dead_lettered ?? 0;
   if (deadLettered > 0) {
-    list.push(`${deadLettered} recipe(s) failed processing and need attention.`);
+    list.push(i18n.t("daycare.status.processing-failures", deadLettered));
   }
   return list;
 });

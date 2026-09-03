@@ -1288,6 +1288,7 @@
       "needs-review": "0 need review|1 needs review|{count} need review",
       "changed-since-plan": "0 recipes changed since this week was planned|1 recipe changed since this week was planned|{count} recipes changed since this week was planned",
       "regenerate-prompt": "Regenerate to pick up the changes.",
+      "processing-failures": "0 recipes failed processing|1 recipe failed processing and needs attention.|{count} recipes failed processing and need attention.",
       "scheduler-last-run": "Last automatic plan",
       "scheduler-next-run": "Next automatic plan",
       "scheduler-not-run-yet": "Not run yet",

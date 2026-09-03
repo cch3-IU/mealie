@@ -188,7 +188,13 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     weekAutoSelected = false;
     if (selectedWeek.value === newWeek) return;
     selectedWeek.value = newWeek;
-    await refreshWeekScoped();
+    mutating.value = true;
+    try {
+      await refreshWeekScoped();
+    }
+    finally {
+      mutating.value = false;
+    }
   }
 
   /**
