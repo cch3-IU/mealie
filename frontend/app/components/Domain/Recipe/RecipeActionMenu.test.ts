@@ -4,7 +4,7 @@ import RecipeActionMenu from "./RecipeActionMenu.vue";
 
 // These pull in Nuxt auto-imports ("#imports") that aren't resolvable outside a Nuxt build;
 // none of them are exercised by the exit-control behavior under test here.
-vi.mock("./RecipeContextMenu/RecipeContextMenu.vue", () => ({ default: { template: "<div />" } }));
+vi.mock("./RecipeContextMenu/RecipeContextMenu.vue", () => ({ default: { template: "<button type=\"button\" class=\"recipe-context-menu-btn\" />" } }));
 vi.mock("./RecipeFavoriteBadge.vue", () => ({ default: { template: "<div />" } }));
 vi.mock("./RecipeTimelineBadge.vue", () => ({ default: { template: "<div />" } }));
 
@@ -16,7 +16,7 @@ const recipe = {
   name: "Chili",
 };
 
-function mountMenu(open: boolean) {
+function mountMenu(open: boolean, options: { loggedIn?: boolean; canEdit?: boolean } = {}) {
   vi.stubGlobal("useNuxtApp", () => ({
     $globals: {
       icons: {
@@ -38,6 +38,8 @@ function mountMenu(open: boolean) {
       name: recipe.name,
       recipeId: recipe.id,
       open,
+      loggedIn: options.loggedIn ?? false,
+      canEdit: options.canEdit ?? false,
     },
     global: {
       mocks: {
@@ -73,6 +75,31 @@ describe("RecipeActionMenu exit control", () => {
 
     const exitBtn = wrapper.find(".recipe-exit-btn");
     expect(exitBtn.exists()).toBe(true);
+  });
+
+  test("places the back/exit control last in the action row, after the other action buttons", () => {
+    const wrapper = mountMenu(false, { loggedIn: true, canEdit: true });
+
+    const group = wrapper.find(".custom-btn-group");
+    const buttons = group.findAll("button");
+    // With loggedIn+canEdit both true, the row renders the edit button and the
+    // RecipeContextMenu overflow button ahead of the exit control.
+    expect(buttons.length).toBe(3);
+    expect(buttons[buttons.length - 1].classes()).toContain("recipe-exit-btn");
+    expect(buttons[buttons.length - 2].classes()).toContain("recipe-context-menu-btn");
+  });
+
+  test("matches the neighbouring edit button's Vuetify props (icon, flat, circle, small, info)", () => {
+    const wrapper = mountMenu(false, { loggedIn: true, canEdit: true });
+
+    const group = wrapper.find(".custom-btn-group");
+    const buttons = group.findAll("button");
+    const editBtn = buttons[0];
+    const exitBtn = wrapper.find(".recipe-exit-btn");
+
+    for (const attr of ["icon", "variant", "rounded", "size", "color"]) {
+      expect(exitBtn.attributes(attr)).toBe(editBtn.attributes(attr));
+    }
   });
 
   test("does not render the back/exit control in edit mode", () => {

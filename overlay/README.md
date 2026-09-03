@@ -79,6 +79,45 @@ reason.
 | `frontend/app/components/Domain/Recipe/RecipePage/RecipePage.vue` | Minimal wiring: compute the exit destination via `useRecipeExit` and `router.push` it on `@exit`. Does not touch the existing `closeEditor`/discard-dialog logic. |
 | `frontend/app/lang/messages/en-US.json` | Add the `general.back-to-recipes` string for the new control's label/tooltip. |
 
+**Follow-up (captain feedback, this lane):** the X/back control originally sat
+before `v-spacer`, at the far left of the view-mode action row, styled with
+its own one-off props (`variant="text"`, `size="large"`, plus a
+`.recipe-exit-btn` CSS rule pinning a 44px min touch target) — visually
+distinct from the filled circular `info`-colored buttons (favorite, timeline,
+edit, overflow menu) sitting at the far right. Moved it into the same
+`div.custom-btn-group` as those buttons, as the last item (after the
+overflow `RecipeContextMenu`), and switched its `v-btn` props to exactly
+match its neighbours (`icon`, `variant="flat"`, `rounded="circle"`,
+`size="small"`, `color="info"`, `class="ml-1"`, `v-icon size="x-large"`),
+dropping the now-redundant `.recipe-exit-btn` CSS rule (the shared `size`
+prop already gives it the same touch target as its neighbours on both
+desktop and the 390×844 mobile viewport). No behavior change: `useRecipeExit`,
+the `@exit`/`@close` event wiring, and edit-mode close semantics are
+untouched. `frontend/app/components/Domain/Recipe/RecipeActionMenu.test.ts`
+gained two tests, both mounted with `loggedIn`/`canEdit` true so the edit
+button and the `RecipeContextMenu` overflow button actually render (the
+prior tests defaulted both props to `false`, so the exit control was the
+only button in the row — a placement assertion against that mount would
+pass regardless of where the control sat): one asserts the exit control is
+the last button in `.custom-btn-group`, after the overflow button; the
+other compares the exit button's `icon`/`variant`/`rounded`/`size`/`color`
+attributes against the edit button's rather than hardcoding literal values,
+so it actually encodes "matches its neighbours" instead of "matches
+whatever I typed."
+
+Also, dropping `.recipe-exit-btn`'s custom CSS (a 44px min-width/min-height
+touch-target override) shrinks its hit area to Vuetify's own `size="small"`
+sizing — the same as its neighbours. That's the intended effect of "no
+custom CSS unless the neighbours have it"; the brief's "thumb-reachable"
+requirement is about position (far right, clear of the overflow menu),
+confirmed via the PR's attached 390×844 mobile screenshots, not about a
+larger-than-sibling touch target.
+
+Net effect on this file's patch surface versus upstream: it shrinks — the
+control moved out of the untouched-upstream region before `v-spacer` into
+the already-modified `.custom-btn-group` block, so the diff against
+upstream `RecipeActionMenu.vue` touches less of the file than before.
+
 ### Phase 6 — Daycare dashboard, settings, and API integration
 
 | Upstream file | Reason |
