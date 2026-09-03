@@ -109,6 +109,7 @@ async function onSubmit() {
   if (!props.lot) return;
 
   if (!formValid.value) {
+    unavailable.value = false;
     errorState.value = {
       status: null,
       code: null,
