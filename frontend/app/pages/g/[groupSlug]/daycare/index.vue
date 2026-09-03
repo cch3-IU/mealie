@@ -73,6 +73,12 @@
           :inventory="daycare.inventory.data.value"
           :loading="daycare.inventory.loading.value"
           :error="daycare.inventory.error.value"
+          :group-slug="groupSlug"
+          :week="daycare.week.data.value"
+          :recipes="daycare.recipes.data.value?.recipes ?? []"
+          :mutating="daycare.mutating.value"
+          :offline="daycare.isOffline.value"
+          :update-lot="daycare.updateLot"
         />
       </v-col>
       <v-col cols="12">

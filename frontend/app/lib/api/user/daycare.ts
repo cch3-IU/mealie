@@ -5,6 +5,8 @@ import type {
   CommitReceipt,
   CompletionPreview,
   InventoryResponse,
+  Lot,
+  LotPatch,
   PlannerSettings,
   PlannerSettingsUpdate,
   PollRequest,
@@ -48,6 +50,7 @@ const routes = {
   weekShopping: (week: string) => `${prefix}/weeks/${week}/shopping`,
   weekShoppingPublish: (week: string) => `${prefix}/weeks/${week}/shopping/publish`,
   inventory: `${prefix}/inventory`,
+  lot: (lotId: number) => `${prefix}/inventory/lots/${lotId}`,
   reservations: `${prefix}/reservations`,
   processing: `${prefix}/processing`,
   processingPoll: `${prefix}/processing/poll`,
@@ -196,6 +199,20 @@ export class DaycareAPI extends BaseAPI {
 
   async getInventory(config?: AxiosRequestConfig) {
     return await this.requests.get<InventoryResponse>(routes.inventory, undefined, config);
+  }
+
+  /**
+   * Patches a lot's remaining portions and/or use-by date. A 409 `lot_reserved` means the new
+   * portions figure is below what's already reserved for planned weeks; a 422 means a bad date.
+   * Not yet present on every deployed sidecar — callers should treat a bare 404/405 as "editing
+   * not available yet" rather than a generic failure.
+   */
+  async updateLot(lotId: number, payload: LotPatch, config?: AxiosRequestConfig) {
+    return await this.requests.patch<Lot, LotPatch>(
+      routes.lot(lotId),
+      payload,
+      withIdempotencyKey(config),
+    );
   }
 
   async getReservations(config?: AxiosRequestConfig) {

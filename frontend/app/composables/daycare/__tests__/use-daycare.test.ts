@@ -8,6 +8,7 @@ const daycareApi = {
   getPrep: vi.fn(),
   getShopping: vi.fn(),
   getInventory: vi.fn(),
+  getRecipes: vi.fn(),
   getReservations: vi.fn(),
   getProcessingStatus: vi.fn(),
   regenerateWeek: vi.fn(),
@@ -18,6 +19,7 @@ const daycareApi = {
   getCompletionPreview: vi.fn(),
   getCommitReceipt: vi.fn(),
   updateSettings: vi.fn(),
+  updateLot: vi.fn(),
 };
 
 let currentUser: { admin?: boolean } | null = { admin: false };
@@ -72,6 +74,7 @@ function resetMocks() {
   daycareApi.getPrep.mockResolvedValue(ok({ week_start: "x" }));
   daycareApi.getShopping.mockResolvedValue(ok({ week_start: "x" }));
   daycareApi.getInventory.mockResolvedValue(ok({ lots: [] }));
+  daycareApi.getRecipes.mockResolvedValue(ok({ recipes: [] }));
   daycareApi.getReservations.mockResolvedValue(ok({ reservations: [] }));
   daycareApi.getProcessingStatus.mockResolvedValue(ok({ recipe_count: 0 }));
 }
@@ -435,5 +438,51 @@ describe("useDaycare mutations", () => {
     expect(daycareApi.updateSettings).toHaveBeenCalledTimes(1);
     expect(daycareApi.getSettings).toHaveBeenCalledTimes(1);
     expect(daycareApi.getWeek).not.toHaveBeenCalled();
+  });
+
+  test("updateLot patches the lot then refetches inventory only", async () => {
+    resetMocks();
+    const updatedLot = { id: 7, recipe_slug: "chicken-barley-soup", portions_remaining: 4, made_date: null, use_by: "2026-05-01", storage: "freezer", notes: null, created_at: "x", updated_at: "x" };
+    daycareApi.updateLot.mockResolvedValue(ok(updatedLot));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getInventory.mockClear();
+    daycareApi.getWeek.mockClear();
+
+    const result = await daycare.updateLot(7, { portions_remaining: 4, use_by: "2026-05-01" });
+
+    expect(daycareApi.updateLot).toHaveBeenCalledWith(7, { portions_remaining: 4, use_by: "2026-05-01" });
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(daycareApi.getWeek).not.toHaveBeenCalled();
+    expect(result.data).toEqual(updatedLot);
+    expect(result.error).toBeNull();
+  });
+
+  test("updateLot still refetches inventory and surfaces a mapped error on a 409 lot_reserved conflict", async () => {
+    resetMocks();
+    daycareApi.updateLot.mockResolvedValue(httpError(409, "lot_reserved", "Can't drop portions below what's reserved."));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getInventory.mockClear();
+
+    const result = await daycare.updateLot(7, { portions_remaining: 0 });
+
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(result.data).toBeNull();
+    expect(result.error?.code).toEqual("lot_reserved");
+    expect(result.error?.kind).toEqual("conflict");
+  });
+});
+
+describe("useDaycare refresh loads recipes", () => {
+  test("refresh fetches the sidecar's recipe summaries alongside the other resources", async () => {
+    resetMocks();
+    daycareApi.getRecipes.mockResolvedValue(ok({ recipes: [{ slug: "chicken-barley-soup", name: "Chicken Barley Soup", classified: true, eligible: true, enabled: true, daycare_portions_per_batch: 8 }] }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+
+    await daycare.refresh();
+
+    expect(daycareApi.getRecipes).toHaveBeenCalledTimes(1);
+    expect(daycare.recipes.data.value?.recipes[0].name).toEqual("Chicken Barley Soup");
   });
 });

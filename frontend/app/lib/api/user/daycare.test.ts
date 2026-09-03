@@ -183,6 +183,15 @@ describe("DaycareAPI mutations attach a fresh Idempotency-Key", () => {
     expect(firstConfig?.headers?.["Idempotency-Key"]).not.toEqual(secondConfig?.headers?.["Idempotency-Key"]);
   });
 
+  test("updateLot PATCHes the lot path with a UUID header", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).updateLot(42, { portions_remaining: 3, use_by: "2026-05-01" });
+    const [url, body, config] = vi.mocked(requests.patch).mock.calls[0];
+    expect(url).toEqual("/api/daycare/v1/inventory/lots/42");
+    expect(body).toEqual({ portions_remaining: 3, use_by: "2026-05-01" });
+    expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
+  });
+
   test("a caller-supplied Idempotency-Key is preserved rather than overwritten, so a retry can replay", async () => {
     const requests = createRequests();
     const api = new DaycareAPI(requests);

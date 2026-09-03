@@ -24,13 +24,16 @@
         </p>
         <v-list v-else>
           <v-list-item v-for="row in productionRows" :key="row.recipe_slug">
-            <v-list-item-title>{{ row.recipe_name }}</v-list-item-title>
-            <v-list-item-subtitle>{{ $t("daycare.prep.batches", row.batches_to_make ?? 0) }}</v-list-item-subtitle>
-            <template #append>
-              <v-btn variant="text" :to="`/g/${groupSlug}/r/${row.recipe_slug}`">
-                {{ $t("daycare.prep.open-recipe") }}
+            <v-list-item-title>
+              <v-btn
+                variant="text"
+                class="px-0 text-none daycare-recipe-title-link"
+                :to="`/g/${groupSlug}/r/${row.recipe_slug}`"
+              >
+                {{ row.recipe_name }}
               </v-btn>
-            </template>
+            </v-list-item-title>
+            <v-list-item-subtitle>{{ $t("daycare.prep.batches", row.batches_to_make ?? 0) }}</v-list-item-subtitle>
           </v-list-item>
         </v-list>
 
@@ -106,3 +109,17 @@ const completionDialogOpen = ref(false);
 
 const completedOnText = computed(() => (props.week?.committed_at ? new Date(props.week.committed_at).toLocaleString() : ""));
 </script>
+
+<style scoped>
+/* Makes the v-btn read as an ordinary title with a link, not a boxed button — the recipe title
+   itself is the link (see DaycareInventoryCard.vue for the same treatment). */
+.daycare-recipe-title-link {
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  font-size: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  justify-content: flex-start;
+}
+</style>

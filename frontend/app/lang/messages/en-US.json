@@ -1250,7 +1250,6 @@
       "title": "Prep",
       "nothing-to-prep": "Nothing to prep for this week.",
       "batches": "0 batches|1 batch|{count} batches",
-      "open-recipe": "Open Recipe",
       "blockers-heading": "Before this can be prepped",
       "mark-complete": "Mark Prep Complete",
       "mark-complete-success": "Prep marked complete.",
@@ -1315,7 +1314,11 @@
       "lot-recipe": "Recipe",
       "lot-portions": "Portions",
       "lot-storage": "Storage",
-      "lot-use-by": "Use By"
+      "lot-use-by": "Use By",
+      "lot-edit": "Edit portions and use-by date",
+      "edit-lot-title": "Edit Prepared Food",
+      "portions-invalid": "Enter a portions amount of 0 or more.",
+      "edit-unavailable": "Editing inventory isn't available yet. Try again shortly."
     },
     "status": {
       "title": "Status",

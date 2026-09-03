@@ -24,6 +24,7 @@ function daycareStateFixture() {
     prep: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     shopping: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     inventory: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
+    recipes: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     reservations: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     processing: { data: { value: null }, loading: { value: false }, error: { value: null }, empty: { value: false } },
     refresh,
@@ -36,6 +37,7 @@ function daycareStateFixture() {
     updateSettings: vi.fn(),
     updateRecipeDaycare: vi.fn(),
     updateSimpleFood: vi.fn(),
+    updateLot: vi.fn(),
     pollProcessing: vi.fn(),
   };
 }

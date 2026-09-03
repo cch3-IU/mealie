@@ -2,6 +2,7 @@ import { useUserApi } from "~/composables/api";
 import { useMealieAuth } from "~/composables/use-mealie-auth";
 import type {
   CompleteRequest,
+  LotPatch,
   PlannerSettingsUpdate,
   PollRequest,
   PublishRequest,
@@ -190,6 +191,7 @@ export function useDaycare(options: UseDaycareOptions = {}) {
   const prep = useResource(() => api.daycare.getPrep(selectedWeek.value), { emptyOnStatus: [404] });
   const shopping = useResource(() => api.daycare.getShopping(selectedWeek.value), { emptyOnStatus: [404] });
   const inventory = useResource(() => api.daycare.getInventory());
+  const recipes = useResource(() => api.daycare.getRecipes());
   const reservations = useResource(() => api.daycare.getReservations());
   const processing = useResource(() => api.daycare.getProcessingStatus());
 
@@ -227,6 +229,7 @@ export function useDaycare(options: UseDaycareOptions = {}) {
       prep.load(),
       shopping.load(),
       inventory.load(),
+      recipes.load(),
       reservations.load(),
       processing.load(),
     ]);
@@ -341,6 +344,19 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     );
   }
 
+  /**
+   * Patches one inventory lot's portions/use-by, then refetches inventory so the change is
+   * visible immediately and persists across reloads. A fresh Idempotency-Key is minted per call
+   * (see `withIdempotencyKey` in `lib/api/user/daycare.ts`) — a corrected resubmission after a
+   * validation error is a distinct logical mutation, not a replay.
+   */
+  async function updateLot(lotId: number, payload: LotPatch) {
+    return await runMutation(
+      () => api.daycare.updateLot(lotId, payload),
+      () => inventory.load(),
+    );
+  }
+
   async function pollProcessing(payload?: PollRequest) {
     return await runMutation(
       () => api.daycare.pollProcessing(payload),
@@ -365,6 +381,7 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     prep,
     shopping,
     inventory,
+    recipes,
     reservations,
     processing,
 
@@ -383,6 +400,7 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     updateSettings,
     updateRecipeDaycare,
     updateSimpleFood,
+    updateLot,
     pollProcessing,
   };
 }
