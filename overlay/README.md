@@ -53,4 +53,22 @@ reason.
 | `frontend/app/components/Layout/DefaultLayout.vue` | Adds one `topLinks` entry ("Daycare") immediately after "Meal Planner", `restricted: true` so it only shows for a signed-in household member in their own group. |
 | `frontend/app/lang/messages/en-US.json` | Adds the `daycare.*` translation keys (nav label, dashboard/settings copy, error fallback text). Note: this is the actual Crowdin-source locale file — the task brief's `frontend/app/lang/locales/en-US.json` path does not exist in this repo; only non-English locale files under `frontend/app/lang/messages/` are Crowdin-managed and must never be hand-edited. |
 
-Not touched: `DefaultLayout.vue`, Daycare nav/pages/client code — owned by a parallel lane.
+## Development notes
+
+Fork-local quirks worth knowing before touching anything above, kept here
+rather than in upstream's `AGENTS.md`/`CLAUDE.md` (charter §12: prefer new
+files and narrow patch points over edits to upstream-owned files, including
+docs, to keep the rebase surface small):
+
+- **`pnpm` via corepack is broken in this checkout:** `frontend/package.json`'s
+  `devEngines.packageManager` (`{name:"pnpm",version:"11"}`) makes the corepack
+  `pnpm` shim fail with `Invalid package manager specification ... expected a
+  semver version`. Use `npx --yes pnpm@latest <command>` instead (or any pnpm
+  installed outside corepack).
+- **Frontend dev server API proxying:** `frontend/server/api/[...].ts` is a
+  Nitro catch-all that proxies every `/api/**` request to
+  `runtimeConfig.apiUrl` (default `http://localhost:9000`, override via the
+  `API_URL` env var) — there is no separate Vite dev-proxy config. Point
+  `API_URL` at a different backend (e.g. a staging gateway) to run `nuxt dev`
+  against it — this is how the Daycare dashboard was verified against the
+  disposable staging stack's Caddy gateway.
