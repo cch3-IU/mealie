@@ -33,15 +33,56 @@
             </template>
           </v-list-item>
         </v-list>
+
+        <template v-if="week?.committed">
+          <p class="mt-3 mb-1">
+            {{ $t("daycare.prep.completed-on", { date: completedOnText }) }}
+          </p>
+          <v-btn variant="text" class="px-0" @click="viewReceiptOpen = true">
+            {{ $t("daycare.prep.view-receipt") }}
+          </v-btn>
+          <DaycarePrepUndoControl
+            :disabled="offline || mutating"
+            :undo-complete-week="undoCompleteWeek"
+            @undone="$emit('undone')"
+          />
+        </template>
+        <v-btn
+          v-else
+          class="mt-3"
+          :disabled="offline || mutating || blockers.length > 0"
+          :loading="mutating"
+          @click="markCompleteOpen = true"
+        >
+          {{ $t("daycare.prep.mark-complete") }}
+        </v-btn>
       </template>
     </v-card-text>
+
+    <DaycarePrepCompletionDialog
+      v-model="markCompleteOpen"
+      :committed="false"
+      :committed-at="week?.committed_at ?? null"
+      :get-completion-preview="getCompletionPreview"
+      :complete-week="completeWeek"
+      @completed="$emit('completed', $event)"
+    />
+    <DaycarePrepCompletionDialog
+      v-model="viewReceiptOpen"
+      :committed="true"
+      :committed-at="week?.committed_at ?? null"
+      :get-completion-preview="getCompletionPreview"
+      :complete-week="completeWeek"
+    />
   </v-card>
 </template>
 
 <script setup lang="ts">
 import DaycareErrorState from "./DaycareErrorState.vue";
+import DaycarePrepCompletionDialog from "./DaycarePrepCompletionDialog.vue";
+import DaycarePrepUndoControl from "./DaycarePrepUndoControl.vue";
 import type { DaycareUiError } from "~/composables/daycare/use-daycare";
-import type { ProductionRow } from "~/lib/api/types/daycare";
+import type { CommitReceipt, CompleteRequest, CompletionPreview, ProductionRow, UndoResult, WeekResponse } from "~/lib/api/types/daycare";
 
 interface Props {
   productionRows: ProductionRow[];
@@ -50,6 +91,22 @@ interface Props {
   error: DaycareUiError | null;
   weekEmpty: boolean;
   groupSlug: string;
+  week: WeekResponse | null;
+  mutating: boolean;
+  offline: boolean;
+  getCompletionPreview: () => Promise<{ data: CompletionPreview | null; error: DaycareUiError | null }>;
+  completeWeek: (payload: CompleteRequest, idempotencyKey: string) => Promise<{ data: CommitReceipt | null; error: DaycareUiError | null }>;
+  undoCompleteWeek: () => Promise<{ data: UndoResult | null; error: DaycareUiError | null }>;
 }
-defineProps<Props>();
+const props = defineProps<Props>();
+
+defineEmits<{
+  completed: [CommitReceipt];
+  undone: [];
+}>();
+
+const markCompleteOpen = ref(false);
+const viewReceiptOpen = ref(false);
+
+const completedOnText = computed(() => (props.week?.committed_at ? new Date(props.week.committed_at).toLocaleString() : ""));
 </script>

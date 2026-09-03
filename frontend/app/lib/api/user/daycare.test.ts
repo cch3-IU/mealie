@@ -176,4 +176,16 @@ describe("DaycareAPI mutations attach a fresh Idempotency-Key", () => {
     const [, , secondConfig] = vi.mocked(requests.post).mock.calls[1];
     expect(firstConfig?.headers?.["Idempotency-Key"]).not.toEqual(secondConfig?.headers?.["Idempotency-Key"]);
   });
+
+  test("a caller-supplied Idempotency-Key is preserved rather than overwritten, so a retry can replay", async () => {
+    const requests = createRequests();
+    const api = new DaycareAPI(requests);
+    const key = "11111111-1111-4111-8111-111111111111";
+    await api.completeWeek("2026-09-07", {}, { headers: { "Idempotency-Key": key } });
+    await api.completeWeek("2026-09-07", {}, { headers: { "Idempotency-Key": key } });
+    const [, , firstConfig] = vi.mocked(requests.post).mock.calls[0];
+    const [, , secondConfig] = vi.mocked(requests.post).mock.calls[1];
+    expect(firstConfig?.headers?.["Idempotency-Key"]).toEqual(key);
+    expect(secondConfig?.headers?.["Idempotency-Key"]).toEqual(key);
+  });
 });

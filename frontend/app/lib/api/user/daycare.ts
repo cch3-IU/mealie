@@ -65,12 +65,19 @@ export function newIdempotencyKey(): string {
   });
 }
 
+/**
+ * Attaches an Idempotency-Key, generating a fresh one unless the caller
+ * already supplied one in `config.headers` — callers that need a retry of
+ * the same logical mutation to replay (rather than mutate twice) pass their
+ * own key through.
+ */
 function withIdempotencyKey(config?: AxiosRequestConfig): AxiosRequestConfig {
+  const existing = (config?.headers as Record<string, unknown> | undefined)?.["Idempotency-Key"];
   return {
     ...config,
     headers: {
       ...config?.headers,
-      "Idempotency-Key": newIdempotencyKey(),
+      "Idempotency-Key": typeof existing === "string" && existing ? existing : newIdempotencyKey(),
     },
   };
 }

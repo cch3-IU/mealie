@@ -15,6 +15,7 @@ const daycareApi = {
   publishShopping: vi.fn(),
   completeWeek: vi.fn(),
   undoCompleteWeek: vi.fn(),
+  getCompletionPreview: vi.fn(),
   updateSettings: vi.fn(),
 };
 
@@ -255,6 +256,106 @@ describe("useDaycare mutations", () => {
     expect(result.data).toBeNull();
     expect(result.error?.kind).toEqual("conflict");
     expect(result.error?.message).toEqual("Week is committed.");
+  });
+
+  test("completeWeek forwards an explicit Idempotency-Key so a retry can replay", async () => {
+    resetMocks();
+    daycareApi.completeWeek.mockResolvedValue(ok({ week_start: "2026-01-05", summary: {} }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+
+    await daycare.completeWeek({}, "11111111-1111-4111-8111-111111111111");
+
+    expect(daycareApi.completeWeek).toHaveBeenCalledWith(
+      "2026-01-05",
+      {},
+      { headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" } },
+    );
+  });
+
+  test("completeWeek omits the config entirely when no key is given", async () => {
+    resetMocks();
+    daycareApi.completeWeek.mockResolvedValue(ok({ week_start: "2026-01-05", summary: {} }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+
+    await daycare.completeWeek({});
+
+    expect(daycareApi.completeWeek).toHaveBeenCalledWith("2026-01-05", {}, undefined);
+  });
+
+  test("a repeat completeWeek call reusing the same key after a week_committed conflict surfaces the persisted receipt details", async () => {
+    resetMocks();
+    const key = "22222222-2222-4222-8222-222222222222";
+    daycareApi.completeWeek.mockResolvedValueOnce(ok({ week_start: "2026-01-05", committed_at: "2026-01-06T00:00:00Z", summary: { existing_inventory_allocated: 4 } }));
+    daycareApi.completeWeek.mockResolvedValueOnce({
+      data: null,
+      error: {
+        response: {
+          status: 409,
+          data: { error: { code: "week_committed", message: "Week is already committed.", details: { committed_at: "2026-01-06T00:00:00Z", summary: { existing_inventory_allocated: 4 } } } },
+        },
+      },
+    });
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+
+    const first = await daycare.completeWeek({}, key);
+    const second = await daycare.completeWeek({}, key);
+
+    expect(first.error).toBeNull();
+    expect(second.error?.code).toEqual("week_committed");
+    expect(second.error?.details?.summary).toEqual({ existing_inventory_allocated: 4 });
+  });
+
+  test("undoCompleteWeek forwards an explicit Idempotency-Key", async () => {
+    resetMocks();
+    daycareApi.undoCompleteWeek.mockResolvedValue(ok({ week_start: "2026-01-05" }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+
+    await daycare.undoCompleteWeek("33333333-3333-4333-8333-333333333333");
+
+    expect(daycareApi.undoCompleteWeek).toHaveBeenCalledWith(
+      "2026-01-05",
+      { headers: { "Idempotency-Key": "33333333-3333-4333-8333-333333333333" } },
+    );
+  });
+
+  test("getCompletionPreview is a plain read that never refetches other resources", async () => {
+    resetMocks();
+    daycareApi.getCompletionPreview.mockResolvedValue(ok({ week_start: "2026-01-05", recipes: [], summary: {} }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getWeek.mockClear();
+
+    const result = await daycare.getCompletionPreview();
+
+    expect(daycareApi.getCompletionPreview).toHaveBeenCalledWith("2026-01-05");
+    expect(result.error).toBeNull();
+    expect(result.data?.week_start).toEqual("2026-01-05");
+    expect(daycareApi.getWeek).not.toHaveBeenCalled();
+  });
+
+  test("getCompletionPreview maps a prep_blocked 409 with its blockers detail", async () => {
+    resetMocks();
+    daycareApi.getCompletionPreview.mockResolvedValue({
+      data: null,
+      error: {
+        response: {
+          status: 409,
+          data: { error: { code: "prep_blocked", message: "Cannot complete prep while blockers remain.", details: { blockers: ["Batch yield not configured"] } } },
+        },
+      },
+    });
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+
+    const result = await daycare.getCompletionPreview();
+
+    expect(result.data).toBeNull();
+    expect(result.error?.code).toEqual("prep_blocked");
+    expect(result.error?.details?.blockers).toEqual(["Batch yield not configured"]);
   });
 
   test("updateSettings requests then refetches settings only", async () => {

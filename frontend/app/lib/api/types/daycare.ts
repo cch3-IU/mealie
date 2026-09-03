@@ -479,15 +479,40 @@ export interface PrepPlan {
   summary: Record<string, unknown>;
 }
 
+export interface CompletionPreviewRecipe {
+  recipe_slug: string;
+  recipe_name: string;
+  week_demand_daycare_portions: number;
+  existing_inventory_allocated: number;
+  new_production_daycare_portions: number;
+  new_production_allocated_to_week: number;
+  leftover_portions_to_inventory: number;
+  leftover_storage: string | null;
+}
+
+export interface CompletionPreviewSummary {
+  week_recipe_portions: number;
+  existing_inventory_allocated: number;
+  new_production_portions: number;
+  new_production_allocated_to_week: number;
+  leftover_portions_to_inventory: number;
+}
+
 export interface CompletionPreview {
   schema_version: number;
   week_start: string;
-  recipes: Record<string, unknown>[];
-  summary: Record<string, unknown>;
+  recipes: CompletionPreviewRecipe[];
+  summary: CompletionPreviewSummary;
 }
 
 export interface CompleteRequest {
   made_date?: string | null;
+}
+
+export interface CommitReceiptSummary {
+  existing_inventory_allocated: number;
+  leftover_portions_added: number;
+  leftover_lots_added: number;
 }
 
 export interface CommitReceipt {
@@ -495,7 +520,22 @@ export interface CommitReceipt {
   week_start: string;
   made_date: string;
   committed_at: string;
-  summary: Record<string, unknown>;
+  summary: CommitReceiptSummary;
+  /** Present on the sidecar's Artifact-typed response (extra="allow"); the full per-recipe breakdown behind `summary`. */
+  completion_preview?: CompletionPreview | null;
+}
+
+/**
+ * Shape of the `details` object on a 409 `week_committed` error (see the
+ * sidecar's `WeekService._commit_reference`) — what a repeat completion
+ * attempt on an already-committed week carries instead of a fresh receipt.
+ */
+export interface CommitReference {
+  week_start: string;
+  committed_at: string | null;
+  made_date: string | null;
+  receipt: string | null;
+  summary: CommitReceiptSummary;
 }
 
 export interface UndoResult {
