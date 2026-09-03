@@ -33,8 +33,19 @@ reason.
 - `frontend/app/tests/stub-vuetify.ts` — a shared Vuetify component stub set reused across the Daycare component tests (Vuetify isn't installed in the Vitest environment, so every component test stubs the Vuetify elements it renders; this collects the common ones instead of duplicating the same stub map in ~8 files).
 - `frontend/app/pages/g/[groupSlug]/daycare/index.vue` (+ test) — the dashboard page.
 - `frontend/app/pages/g/[groupSlug]/daycare/settings.vue` (+ test) — the admin-gated settings page.
+- `frontend/app/composables/daycare/use-recipe-daycare.ts` (+ test) — a second, lighter composable for the recipe-page panel. Deliberately does not reuse `useDaycare()`, which loads the whole household's status/settings/week/prep/shopping/inventory/reservations/processing on every call — far more than a single recipe's panel needs on every recipe page view. Fetches only the recipe's own daycare record, its prepared-inventory totals, the household-wide processing report (to derive this one recipe's processing/classification status via `deriveProcessingNote`), and (best-effort) the current week's plan for "next planned use". Also owns the `uses` array ↔ per-slot-roles map conversion used by the edit form, and hides entirely (no data fetched beyond the first call) the moment the sidecar reports the caller is outside the daycare household.
+- `frontend/app/components/Domain/Daycare/RecipeDaycareSummary.vue` (+ test) — read-only display of one recipe's daycare record: enabled, eligible slots/roles, portions per batch, batchable/freezable/storage, prepared portions (total physical on hand, not just the unreserved `free` count — a household member checking "do we have any of this made" wants the whole freezer stash), next planned use, and processing/classification/review status.
+- `frontend/app/components/Domain/Daycare/RecipeDaycareEditForm.vue` (+ test) — edit form for the recipe-specific fields only (enabled, slots/roles, portions per batch, batchable, freezable, preferred storage); hides the classification-derived fields when the recipe hasn't been classified yet, since the sidecar 409s a classification-override PUT in that state (`services/recipes.py::_apply_classification_patch`). Normalizes an emptied portions-per-batch field to `null` rather than `v-model.number`'s raw `""` on a failed parse, which the sidecar's settings-patch validator otherwise rejects with a 422.
+- `frontend/app/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageDaycarePanel.vue` (+ test) — the panel itself: loads via `useRecipeDaycare`, gates visibility (nothing rendered until the household check has settled, so an out-of-household user never sees a flash of the card), shows `DaycareErrorState` inline when the sidecar is unreachable, is collapsible (edit form hidden behind its own toggle so opening the panel never dumps a full form onto the recipe page), and links to `/g/{groupSlug}/daycare/settings` for global planner settings rather than exposing them here (per charter §3.3 — recipe-specific fields are any household member's to edit, global settings are admin-only).
 
 ## Modified upstream files
+
+### Phase 8 — Recipe-page Daycare panel (charter §7 Phase 8, §10, §3.3, §23.9)
+
+| Upstream file | Reason |
+| --- | --- |
+| `frontend/app/components/Domain/Recipe/RecipePage/RecipePage.vue` | Minimal wiring: one import plus one line rendering `RecipePageDaycarePanel` (view mode only, `v-if="!isEditForm"`) inside the existing content area, right after `RecipePageFooter`. Does not touch `RecipePageHeader.vue` or `RecipeActionMenu.vue` (Phase 9's back/X control). |
+| `frontend/app/lang/messages/en-US.json` | Adds the `daycare.recipe.*` translation keys for the panel's labels, edit form, and empty/limited-edit notices; reuses the existing `daycare.plan.*` slot labels and `daycare.errors.*` fallbacks rather than duplicating them. |
 
 ### Phase 9 — Recipe page back/X control (charter §7 Phase 9, §23.17)
 

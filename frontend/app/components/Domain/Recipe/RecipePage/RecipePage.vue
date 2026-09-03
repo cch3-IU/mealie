@@ -104,6 +104,7 @@
             </v-col>
           </v-row>
           <RecipePageFooter v-model="recipe" />
+          <RecipePageDaycarePanel v-if="!isEditForm" :slug="recipe.slug" :group-slug="groupSlug" />
         </v-card-text>
       </v-card>
       <WakelockSwitch />
@@ -224,6 +225,7 @@ import RecipePageParseDialog from "./RecipePageParts/RecipeParseDialog/RecipePag
 import RecipePageScale from "./RecipePageParts/RecipePageScale.vue";
 import RecipePageInfoEditor from "./RecipePageParts/RecipePageInfoEditor.vue";
 import RecipePageComments from "./RecipePageParts/RecipePageComments.vue";
+import RecipePageDaycarePanel from "./RecipePageParts/RecipePageDaycarePanel.vue";
 import RecipePrintContainer from "~/components/Domain/Recipe/RecipePrintContainer.vue";
 import {
   clearPageState,
