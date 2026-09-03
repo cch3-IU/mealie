@@ -9,7 +9,10 @@
       </p>
       <template v-else-if="week">
         <v-alert v-if="week.committed" type="info" variant="tonal" density="comfortable" class="mb-2">
-          {{ $t("daycare.plan.committed-notice") }}
+          {{ $t("daycare.plan.week-locked") }}
+          <template v-if="week.committed_at">
+            {{ $t("daycare.plan.week-locked-on", { date: committedAtText }) }}
+          </template>
         </v-alert>
         <v-alert v-if="week.stale" type="warning" variant="tonal" density="comfortable" class="mb-2">
           {{ $t("daycare.plan.stale-notice", { reason: week.stale_reason }) }}
@@ -94,4 +97,5 @@ const showWeek = ref(false);
 const confirmOpen = ref(false);
 
 const summary = computed(() => summarizePlanWeek(props.week?.plan));
+const committedAtText = computed(() => (props.week?.committed_at ? new Date(props.week.committed_at).toLocaleString() : ""));
 </script>

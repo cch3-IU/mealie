@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   changedSincePlanCount,
+  groupRelaxedSpacingWarnings,
+  parseShoppingBlockers,
+  recipeLinksForSlugs,
   recipesNeedingProduction,
   recipesNeedingReviewCount,
   summarizePlanWeek,
@@ -144,5 +147,88 @@ describe("changedSincePlanCount / recipesNeedingReviewCount", () => {
   test("counts recipes lacking classification as needing review", () => {
     const processing = processingFixture({ recipes_lacking_classification: ["a", "b"] });
     expect(recipesNeedingReviewCount(processing)).toEqual(2);
+  });
+});
+
+describe("parseShoppingBlockers", () => {
+  function row(overrides: Partial<ProductionRow> = {}): ProductionRow {
+    return {
+      recipe_slug: "sweet-potato-apple-biscuits",
+      recipe_name: "Sweet Potato & Apple Biscuits",
+      demand_daycare_portions: 10,
+      inventory_available: 0,
+      shortage_daycare_portions: 10,
+      batchable: true,
+      daycare_portions_per_batch: null,
+      batches_to_make: null,
+      yield_needs_configuration: true,
+      ...overrides,
+    };
+  }
+
+  test("resolves a blocker's recipe name to the slug from the week's production plan", () => {
+    const week = plan([], [row()]);
+    const result = parseShoppingBlockers(["Sweet Potato & Apple Biscuits: batch size is not calibrated"], week);
+    expect(result).toEqual([
+      { text: "Sweet Potato & Apple Biscuits: batch size is not calibrated", recipeName: "Sweet Potato & Apple Biscuits", recipeSlug: "sweet-potato-apple-biscuits", detail: "batch size is not calibrated" },
+    ]);
+  });
+
+  test("falls back to a null slug when the recipe isn't in the current week's production plan", () => {
+    const result = parseShoppingBlockers(["Untracked Recipe: batch size is not calibrated"], plan([], []));
+    expect(result[0].recipeSlug).toBeNull();
+    expect(result[0].recipeName).toEqual("Untracked Recipe");
+  });
+
+  test("falls back to the raw text when a blocker has no recognizable name/reason split", () => {
+    const result = parseShoppingBlockers(["something went sideways"], null);
+    expect(result).toEqual([{ text: "something went sideways", recipeName: null, recipeSlug: null, detail: null }]);
+  });
+});
+
+describe("recipeLinksForSlugs", () => {
+  function row(overrides: Partial<ProductionRow> = {}): ProductionRow {
+    return {
+      recipe_slug: "sweet-potato-apple-biscuits",
+      recipe_name: "Sweet Potato & Apple Biscuits",
+      demand_daycare_portions: 10,
+      inventory_available: 0,
+      shortage_daycare_portions: 10,
+      batchable: true,
+      daycare_portions_per_batch: null,
+      batches_to_make: null,
+      yield_needs_configuration: true,
+      ...overrides,
+    };
+  }
+
+  test("resolves a slug to its display name from the week's production plan", () => {
+    const week = plan([], [row()]);
+    expect(recipeLinksForSlugs(["sweet-potato-apple-biscuits"], week)).toEqual([
+      { slug: "sweet-potato-apple-biscuits", name: "Sweet Potato & Apple Biscuits" },
+    ]);
+  });
+
+  test("falls back to the bare slug when the recipe isn't in the current week's plan", () => {
+    expect(recipeLinksForSlugs(["untracked-recipe"], null)).toEqual([{ slug: "untracked-recipe", name: "untracked-recipe" }]);
+  });
+});
+
+describe("groupRelaxedSpacingWarnings", () => {
+  test("collapses the repeated relaxed-spacing family into one count, keeping other warnings individual", () => {
+    const warnings = [
+      "Relaxed spacing/repetition for 2026-01-05 breakfast to use prepared inventory instead of opening new production.",
+      "Relaxed spacing/repetition for 2026-01-06 lunch to use prepared inventory instead of opening new production.",
+      "Two recipes share a rotation group this week.",
+    ];
+    const { relaxedSpacing, rest } = groupRelaxedSpacingWarnings(warnings);
+    expect(relaxedSpacing).toEqual({ count: 2, details: warnings.slice(0, 2) });
+    expect(rest).toEqual(["Two recipes share a rotation group this week."]);
+  });
+
+  test("returns a null group when nothing matches", () => {
+    const { relaxedSpacing, rest } = groupRelaxedSpacingWarnings(["Two recipes share a rotation group this week."]);
+    expect(relaxedSpacing).toBeNull();
+    expect(rest).toEqual(["Two recipes share a rotation group this week."]);
   });
 });
