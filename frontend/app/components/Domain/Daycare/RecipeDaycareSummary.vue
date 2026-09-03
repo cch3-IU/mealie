@@ -46,7 +46,16 @@
 
     <p class="mb-1">
       <span class="font-weight-medium">{{ $t("daycare.recipe.prepared-portions") }}:</span>
-      {{ prepared?.physical ?? 0 }}
+      <template v-if="preparedError">
+        &mdash;
+        <span class="text-caption text-medium-emphasis">{{ $t("daycare.recipe.prepared-portions-unavailable") }}</span>
+        <v-btn variant="text" size="x-small" class="px-1" @click="emit('retry-prepared')">
+          {{ $t("daycare.recipe.retry") }}
+        </v-btn>
+      </template>
+      <template v-else>
+        {{ prepared?.physical ?? 0 }}
+      </template>
     </p>
 
     <p class="mb-1">
@@ -62,16 +71,19 @@
 </template>
 
 <script setup lang="ts">
+import type { DaycareUiError } from "~/composables/daycare/use-daycare";
 import type { NextPlannedUse, ProcessingNote } from "~/composables/daycare/use-recipe-daycare";
 import type { LotTotals, RecipeDaycare } from "~/lib/api/types/daycare";
 
 interface Props {
   record: RecipeDaycare;
   prepared: LotTotals | null;
+  preparedError?: DaycareUiError | null;
   nextUse: NextPlannedUse | null;
   processingNote: ProcessingNote | null;
 }
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), { preparedError: null });
+const emit = defineEmits<{ "retry-prepared": [] }>();
 
 const i18n = useI18n();
 

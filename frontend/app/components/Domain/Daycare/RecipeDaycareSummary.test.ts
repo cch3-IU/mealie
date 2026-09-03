@@ -101,4 +101,25 @@ describe("RecipeDaycareSummary", () => {
     const wrapper = mountSummary({ record: recordFixture(), processingNote: { state: null, lastError: null, lackingYield: true } });
     expect(wrapper.text()).toContain("Set portions per batch to enable batch production");
   });
+
+  test("shows an unavailable notice, not a zero, when the inventory fetch failed", () => {
+    const wrapper = mountSummary({
+      record: recordFixture(),
+      prepared: null,
+      preparedError: { status: 502, code: null, message: null, kind: "unreachable", details: null },
+    });
+    expect(wrapper.text()).toContain("Unavailable");
+    expect(wrapper.text()).not.toContain("Prepared now: 0");
+    expect(wrapper.text()).not.toContain("Prepared now:0");
+  });
+
+  test("emits retry-prepared when the retry affordance is clicked after a failed inventory fetch", async () => {
+    const wrapper = mountSummary({
+      record: recordFixture(),
+      prepared: null,
+      preparedError: { status: 502, code: null, message: null, kind: "unreachable", details: null },
+    });
+    await wrapper.find("button").trigger("click");
+    expect(wrapper.emitted("retry-prepared")).toHaveLength(1);
+  });
 });

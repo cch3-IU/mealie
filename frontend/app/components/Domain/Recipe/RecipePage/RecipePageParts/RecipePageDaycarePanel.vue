@@ -17,8 +17,10 @@
           <RecipeDaycareSummary
             :record="record"
             :prepared="daycare.preparedPortions.value"
+            :prepared-error="daycare.inventory.error.value"
             :next-use="daycare.nextPlannedUse.value"
             :processing-note="daycare.processingNote.value"
+            @retry-prepared="daycare.retryInventory"
           />
           <div class="d-flex align-center mt-2">
             <v-btn v-if="!editing" variant="text" size="small" class="px-0" @click="editing = true">

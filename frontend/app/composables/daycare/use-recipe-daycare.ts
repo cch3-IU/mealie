@@ -193,14 +193,19 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
       return;
     }
 
-    const settingsResult = await api.daycare.getSettings();
-    await Promise.all([
+    const [, , settingsResult] = await Promise.all([
       fill(inventory, () => api.daycare.getInventory()),
       fill(processing, () => api.daycare.getProcessingStatus()),
-      settingsResult.data
-        ? fill(week, () => api.daycare.getWeek(currentWeekStart(settingsResult.data!.week_start_weekday)), [404])
-        : Promise.resolve(),
+      api.daycare.getSettings(),
     ]);
+    if (settingsResult.data) {
+      await fill(week, () => api.daycare.getWeek(currentWeekStart(settingsResult.data!.week_start_weekday)), [404]);
+    }
+  }
+
+  /** Refetches just the inventory resource, for a retry affordance when only that fetch failed. */
+  async function retryInventory() {
+    await fill(inventory, () => api.daycare.getInventory());
   }
 
   async function updateRecipeDaycare(payload: RecipeDaycareUpdate) {
@@ -231,6 +236,7 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
     nextPlannedUse,
     processingNote,
     load,
+    retryInventory,
     updateRecipeDaycare,
   };
 }

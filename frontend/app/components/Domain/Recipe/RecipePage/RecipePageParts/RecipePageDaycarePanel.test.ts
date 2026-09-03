@@ -229,6 +229,33 @@ describe("RecipePageDaycarePanel", () => {
     expect(wrapper.text()).toEqual("");
   });
 
+  test("prepared portions: shows an unavailable notice (not zero) when only the inventory fetch fails, with a working retry", async () => {
+    let inventoryCalls = 0;
+    requests = createRequests((url) => {
+      if (url.endsWith("/inventory")) {
+        inventoryCalls += 1;
+        return inventoryCalls === 1 ? Promise.resolve(apiErrorNoMessage(502)) : Promise.resolve(apiResult(inventoryFixture));
+      }
+      return happyPathGet(url);
+    });
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Prepared now");
+    expect(wrapper.text()).toContain("Unavailable");
+    expect(wrapper.text()).not.toContain("Prepared now: 0");
+    expect(inventoryCalls).toEqual(1);
+
+    const retryButton = wrapper.findAll("button").find(b => b.text() === "Retry");
+    expect(retryButton).toBeTruthy();
+    await retryButton!.trigger("click");
+    await flushPromises();
+
+    expect(inventoryCalls).toEqual(2);
+    expect(wrapper.text()).toContain("4"); // physical prepared portions, after the retry succeeds
+    expect(wrapper.text()).not.toContain("Unavailable");
+  });
+
   test("shows a not-tracked notice instead of an error when the sidecar hasn't seen this recipe yet", async () => {
     requests = createRequests(url => (url.endsWith("/daycare") ? Promise.resolve(apiError(404, "recipe_not_found")) : happyPathGet(url)));
     const wrapper = mountPanel();

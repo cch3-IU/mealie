@@ -1,3 +1,4 @@
+import { flushPromises } from "@vue/test-utils";
 import { describe, expect, test, vi } from "vitest";
 import {
   currentWeekStart,
@@ -289,6 +290,56 @@ describe("useRecipeDaycare", () => {
     expect(daycare.recipeDaycare.error.value?.kind).toEqual("unreachable");
     expect(daycareApi.getInventory).not.toHaveBeenCalled();
     expect(daycareApi.getProcessingStatus).not.toHaveBeenCalled();
+  });
+
+  test("inventory, processing, and settings fetch concurrently, not sequentially", async () => {
+    resetMocks();
+    daycareApi.getRecipeDaycare.mockResolvedValue(ok(recipeDaycareFixture));
+    daycareApi.getWeek.mockResolvedValue(ok({ plan: { days: [] } }));
+
+    const order: string[] = [];
+    let releaseSettings!: () => void;
+    daycareApi.getSettings.mockImplementation(() => new Promise((resolve) => {
+      releaseSettings = () => { order.push("settings"); resolve(ok(settingsFixture)); };
+    }));
+    daycareApi.getInventory.mockImplementation(() => {
+      order.push("inventory");
+      return Promise.resolve(ok({ lots: [], totals: {}, summary: { lot_count: 0, physical: 0, reserved: 0, free: 0 } }));
+    });
+    daycareApi.getProcessingStatus.mockImplementation(() => {
+      order.push("processing");
+      return Promise.resolve(ok(processingFixture()));
+    });
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    const loadPromise = daycare.load();
+
+    // Inventory and processing resolve before settings does, proving they were fired without waiting on it.
+    await flushPromises();
+    expect(order).toEqual(expect.arrayContaining(["inventory", "processing"]));
+    expect(order).not.toContain("settings");
+
+    releaseSettings();
+    await loadPromise;
+
+    expect(daycareApi.getWeek).toHaveBeenCalledTimes(1);
+  });
+
+  test("retryInventory refetches only the inventory resource", async () => {
+    resetMocks();
+    daycareApi.getInventory.mockResolvedValueOnce({ data: null, error: { response: { status: 502, data: {} } } });
+    daycareApi.getInventory.mockResolvedValueOnce(ok({ lots: [], totals: { "chicken-barley-soup": { physical: 4, reserved: 0, free: 4 } }, summary: { lot_count: 1, physical: 4, reserved: 0, free: 4 } }));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    await daycare.retryInventory();
+    expect(daycare.inventory.error.value?.kind).toEqual("unreachable");
+    expect(daycare.preparedPortions.value).toBeNull();
+
+    await daycare.retryInventory();
+    expect(daycare.inventory.error.value).toBeNull();
+    expect(daycare.preparedPortions.value).toEqual({ physical: 4, reserved: 0, free: 4 });
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(2);
+    expect(daycareApi.getRecipeDaycare).not.toHaveBeenCalled();
   });
 
   test("updateRecipeDaycare replaces recipeDaycare.data on success", async () => {
