@@ -21,6 +21,7 @@
             :next-use="daycare.nextPlannedUse.value"
             :processing-note="daycare.processingNote.value"
             @retry-prepared="daycare.retryInventory"
+            @preview-writeback="writebackDialogOpen = true"
           />
           <div class="d-flex align-center mt-2">
             <v-btn v-if="!editing" variant="text" size="small" class="px-0" @click="editing = true">
@@ -44,6 +45,14 @@
         </template>
       </v-card-text>
     </v-expand-transition>
+
+    <RecipeIngredientWritebackDialog
+      v-if="record"
+      v-model="writebackDialogOpen"
+      :get-preview="daycare.getIngredientWritebackPreview"
+      :apply-writeback="daycare.applyIngredientWriteback"
+      :undo-writeback="daycare.undoIngredientWriteback"
+    />
   </v-card>
 </template>
 
@@ -51,6 +60,7 @@
 import DaycareErrorState from "~/components/Domain/Daycare/DaycareErrorState.vue";
 import RecipeDaycareEditForm from "~/components/Domain/Daycare/RecipeDaycareEditForm.vue";
 import RecipeDaycareSummary from "~/components/Domain/Daycare/RecipeDaycareSummary.vue";
+import RecipeIngredientWritebackDialog from "~/components/Domain/Daycare/RecipeIngredientWritebackDialog.vue";
 import { useRecipeDaycare } from "~/composables/daycare/use-recipe-daycare";
 import { alert } from "~/composables/use-toast";
 import type { RecipeDaycareUpdate } from "~/lib/api/types/daycare";
@@ -69,6 +79,7 @@ const expanded = ref(true);
 /** Whether the (larger) edit form is shown, separate from `expanded` so opening the panel never
  * immediately dumps a full form of switches/checkboxes onto the recipe page. */
 const editing = ref(false);
+const writebackDialogOpen = ref(false);
 
 /**
  * Rendered only once the initial fetch has settled and the caller isn't forbidden (a different

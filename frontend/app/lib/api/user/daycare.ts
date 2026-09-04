@@ -4,6 +4,9 @@ import type {
   CompleteRequest,
   CommitReceipt,
   CompletionPreview,
+  IngredientWritebackPreview,
+  IngredientWritebackReceipt,
+  IngredientWritebackUndoResult,
   InventoryResponse,
   Lot,
   LotPatch,
@@ -40,6 +43,9 @@ const routes = {
   settings: `${prefix}/settings`,
   recipes: `${prefix}/recipes`,
   recipeDaycare: (slug: string) => `${prefix}/recipes/${slug}/daycare`,
+  recipeIngredientWritebackPreview: (slug: string) => `${prefix}/recipes/${slug}/ingredient-writeback/preview`,
+  recipeIngredientWriteback: (slug: string) => `${prefix}/recipes/${slug}/ingredient-writeback`,
+  recipeIngredientWritebackUndo: (slug: string) => `${prefix}/recipes/${slug}/ingredient-writeback/undo`,
   simpleFoods: `${prefix}/simple-foods`,
   simpleFood: (foodId: string) => `${prefix}/simple-foods/${foodId}`,
   week: (week: string) => `${prefix}/weeks/${week}`,
@@ -126,6 +132,37 @@ export class DaycareAPI extends BaseAPI {
     return await this.requests.put<RecipeDaycare, RecipeDaycareUpdate>(
       routes.recipeDaycare(slug),
       payload,
+      withIdempotencyKey(config),
+    );
+  }
+
+  /** Dry-run diff of what applying ingredient write-back would change for this recipe. A read; never mutates. */
+  async getIngredientWritebackPreview(slug: string, config?: AxiosRequestConfig) {
+    return await this.requests.get<IngredientWritebackPreview>(
+      routes.recipeIngredientWritebackPreview(slug),
+      undefined,
+      config,
+    );
+  }
+
+  /**
+   * Applies the previewed ingredient clean-up to the recipe. 409s with `writeback_disabled` (global
+   * or per-recipe switch off), `write_disabled` (sidecar-wide write gate off), `recipe_edited`
+   * (fingerprint moved since preview — reload it) or `ambiguous_organizer` (details.ambiguities).
+   */
+  async applyIngredientWriteback(slug: string, config?: AxiosRequestConfig) {
+    return await this.requests.post<IngredientWritebackReceipt>(
+      routes.recipeIngredientWriteback(slug),
+      {},
+      withIdempotencyKey(config),
+    );
+  }
+
+  /** Restores the recipe's ingredients to their pre-writeback state. 409s with `no_receipt` or `recipe_edited`. */
+  async undoIngredientWriteback(slug: string, config?: AxiosRequestConfig) {
+    return await this.requests.post<IngredientWritebackUndoResult>(
+      routes.recipeIngredientWritebackUndo(slug),
+      {},
       withIdempotencyKey(config),
     );
   }

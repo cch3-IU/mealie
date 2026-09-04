@@ -17,6 +17,9 @@ const daycareApi = {
   getWeek: vi.fn(),
   getProcessingStatus: vi.fn(),
   updateRecipeDaycare: vi.fn(),
+  getIngredientWritebackPreview: vi.fn(),
+  applyIngredientWriteback: vi.fn(),
+  undoIngredientWriteback: vi.fn(),
 };
 
 vi.mock("~/composables/api", () => ({
@@ -44,6 +47,7 @@ const recipeDaycareFixture = {
   override_applied: false,
   override: null,
   settings: { enabled: true, daycare_portions_per_batch: 6, max_uses_per_week: null, max_inventory_uses_per_week: null, score_adjustment: null, reason: null },
+  ingredient_writeback: false,
 };
 
 const settingsFixture = {
@@ -66,6 +70,7 @@ const settingsFixture = {
     timezone: "America/Indiana/Indianapolis",
     auto_publish_meal_plan: false,
     auto_publish_shopping_list: false,
+    ingredient_writeback_enabled: false,
   },
   config_version: 1,
   week_start_weekday: "wednesday" as const,
@@ -194,6 +199,7 @@ function processingFixture(overrides: Partial<ProcessingStatus> = {}): Processin
       recent: [],
       changed_since_plan: { week: null, planned_at: null, count: 0, recipes: [] },
     },
+    ingredient_writeback: { enabled: false, written: 0, eligible: 0, ambiguous: 0 },
     ...overrides,
   };
 }
@@ -364,5 +370,74 @@ describe("useRecipeDaycare", () => {
 
     expect(result.error?.kind).toEqual("conflict");
     expect(daycare.recipeDaycare.data.value).toBeNull();
+  });
+
+  test("getIngredientWritebackPreview is a plain on-demand read", async () => {
+    resetMocks();
+    const preview = {
+      slug: "chicken-barley-soup",
+      fingerprint_ok: true,
+      fingerprint_reason: null,
+      enabled_global: true,
+      enabled_recipe: true,
+      write_enabled: true,
+      can_apply: true,
+      rows: [],
+      creations: [],
+      ambiguities: [],
+      skipped: [],
+      receipt: null,
+    };
+    daycareApi.getIngredientWritebackPreview.mockResolvedValue(ok(preview));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    const result = await daycare.getIngredientWritebackPreview();
+
+    expect(result.data).toEqual(preview);
+    expect(daycareApi.getIngredientWritebackPreview).toHaveBeenCalledWith("chicken-barley-soup");
+  });
+
+  test("applyIngredientWriteback forwards an explicit Idempotency-Key and toggles mutating", async () => {
+    resetMocks();
+    const receipt = { slug: "chicken-barley-soup", applied_at: "2026-01-01T00:00:00Z", fingerprint: "f1", rows_written: 2, rows_plain: 1, foods_created: [], units_created: [], verified: true, receipt_path: null };
+    daycareApi.applyIngredientWriteback.mockResolvedValue(ok(receipt));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    expect(daycare.mutating.value).toBe(false);
+    const result = await daycare.applyIngredientWriteback("11111111-1111-4111-8111-111111111111");
+
+    expect(result.data).toEqual(receipt);
+    expect(daycare.mutating.value).toBe(false);
+    expect(daycareApi.applyIngredientWriteback).toHaveBeenCalledWith(
+      "chicken-barley-soup",
+      { headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" } },
+    );
+  });
+
+  test("applyIngredientWriteback maps a 409 writeback_disabled failure", async () => {
+    resetMocks();
+    daycareApi.applyIngredientWriteback.mockResolvedValue(httpError(409, "writeback_disabled", "Ingredient write-back is turned off."));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    const result = await daycare.applyIngredientWriteback();
+
+    expect(result.data).toBeNull();
+    expect(result.error?.code).toEqual("writeback_disabled");
+    expect(result.error?.kind).toEqual("conflict");
+  });
+
+  test("undoIngredientWriteback forwards an explicit Idempotency-Key", async () => {
+    resetMocks();
+    const undoResult = { slug: "chicken-barley-soup", restored_at: "2026-01-01T00:00:00Z", rows_restored: 2 };
+    daycareApi.undoIngredientWriteback.mockResolvedValue(ok(undoResult));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    const result = await daycare.undoIngredientWriteback("22222222-2222-4222-8222-222222222222");
+
+    expect(result.data).toEqual(undoResult);
+    expect(daycareApi.undoIngredientWriteback).toHaveBeenCalledWith(
+      "chicken-barley-soup",
+      { headers: { "Idempotency-Key": "22222222-2222-4222-8222-222222222222" } },
+    );
   });
 });

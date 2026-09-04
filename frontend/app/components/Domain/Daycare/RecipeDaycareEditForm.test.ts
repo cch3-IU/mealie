@@ -44,6 +44,7 @@ function recordFixture(overrides: Partial<RecipeDaycare> = {}): RecipeDaycare {
     override_applied: false,
     override: null,
     settings: { enabled: true, daycare_portions_per_batch: 6, max_uses_per_week: null, max_inventory_uses_per_week: null, score_adjustment: null, reason: null },
+    ingredient_writeback: false,
     ...overrides,
   };
 }
@@ -68,7 +69,16 @@ describe("RecipeDaycareEditForm", () => {
         uses: { breakfast: null, lunch: ["main"], snack: null },
         production: { batchable: true, freezable: "yes", preferred_batch_storage: "freezer" },
       },
+      ingredient_writeback: false,
     });
+  });
+
+  test("ingredient write-back switch defaults from the record and is included in the save payload", async () => {
+    const wrapper = mountForm(recordFixture({ ingredient_writeback: true }));
+    await wrapper.find("form").trigger("submit");
+
+    const payload = wrapper.emitted("save")![0][0] as { ingredient_writeback: boolean };
+    expect(payload.ingredient_writeback).toBe(true);
   });
 
   test("prevents the native form submission (no full-page navigation)", async () => {

@@ -28,6 +28,7 @@ function settingsFixture(): PlannerSettings {
       timezone: "America/Indiana/Indianapolis",
       auto_publish_meal_plan: false,
       auto_publish_shopping_list: false,
+      ingredient_writeback_enabled: false,
     },
     config_version: 1,
     week_start_weekday: "monday",
@@ -112,6 +113,17 @@ describe("Daycare settings page", () => {
     const payload = updateSettings.mock.calls[0][0];
     expect(payload.planning.max_recipe_uses_per_week).toEqual(2);
     expect(payload.automation.planning_weekday).toEqual("monday");
+  });
+
+  test("ingredient write-back switch is off by default and included in the save payload", async () => {
+    daycareState = daycareStateFixture({ isAdmin: { value: true } });
+    updateSettings.mockResolvedValue({ data: settingsFixture(), error: null });
+    const wrapper = mountPage();
+
+    await wrapper.find("form").trigger("submit");
+
+    const payload = updateSettings.mock.calls[0][0];
+    expect(payload.automation.ingredient_writeback_enabled).toEqual(false);
   });
 
   test("surfaces the server's validation message on a failed save", async () => {
