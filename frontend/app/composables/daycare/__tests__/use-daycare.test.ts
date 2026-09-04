@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { committedAtFromError, mapDaycareError, nextWeekStart, shoppingBlockers, useDaycare } from "../use-daycare";
+import { committedAtFromError, mapDaycareError, nextWeekStart, shoppingBlockers, unlockPlanFromError, useDaycare } from "../use-daycare";
 
 const daycareApi = {
   getStatus: vi.fn(),
@@ -18,6 +18,8 @@ const daycareApi = {
   undoCompleteWeek: vi.fn(),
   getCompletionPreview: vi.fn(),
   getCommitReceipt: vi.fn(),
+  getUnlockPreview: vi.fn(),
+  unlockWeek: vi.fn(),
   updateSettings: vi.fn(),
   updateLot: vi.fn(),
 };
@@ -129,6 +131,34 @@ describe("committedAtFromError", () => {
   test("reads the committed_at detail off a week_committed error", () => {
     const error = { status: 409, code: "week_committed", message: "m", kind: "conflict" as const, details: { committed_at: "2026-01-06T00:00:00Z" } };
     expect(committedAtFromError(error)).toEqual("2026-01-06T00:00:00Z");
+  });
+});
+
+describe("unlockPlanFromError", () => {
+  test("returns null when there's no unlock_unsafe error", () => {
+    expect(unlockPlanFromError(null)).toBeNull();
+    expect(unlockPlanFromError({ status: 409, code: "week_committed", message: null, kind: "conflict", details: { plan: { safe: false } } })).toBeNull();
+  });
+
+  test("reads the plan out of an unlock_unsafe 409's details.plan (nested under a plan key, not spread into details)", () => {
+    const plan = {
+      week_start: "2026-01-05",
+      created_lots: [{ lot_id: 9, recipe_slug: "chicken-barley-soup", portions: 8, current_portions_remaining: 8, exists: true, touched: false, made_date: "2026-01-06", use_by: null, storage: "freezer" }],
+      consumed_source_lots: [],
+      missing_source_lot: false,
+      affected_reservations: [{ week_start: "2026-01-12", recipe_slug: "chicken-barley-soup", portions: 8 }],
+      affected_weeks: ["2026-01-12"],
+      safe: false,
+      reasons: ["Some of this week's prepared food has already been used"],
+    };
+    const error = {
+      status: 409,
+      code: "unlock_unsafe" as const,
+      message: "Unlocking this week isn't safe.",
+      kind: "conflict" as const,
+      details: { week_start: "2026-01-05", plan },
+    };
+    expect(unlockPlanFromError(error)).toEqual(plan);
   });
 });
 
@@ -419,6 +449,65 @@ describe("useDaycare mutations", () => {
 
     expect(result.data).toBeNull();
     expect(result.error?.code).toEqual("receipt_not_found");
+  });
+
+  test("getUnlockPreview is a plain read that never refetches other resources", async () => {
+    resetMocks();
+    daycareApi.getUnlockPreview.mockResolvedValue(ok({ week_start: "2026-01-05", created_lots: [], consumed_source_lots: [], missing_source_lot: false, affected_reservations: [], affected_weeks: [], safe: true, reasons: [] }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getWeek.mockClear();
+
+    const result = await daycare.getUnlockPreview();
+
+    expect(daycareApi.getUnlockPreview).toHaveBeenCalledWith("2026-01-05");
+    expect(result.error).toBeNull();
+    expect(result.data?.safe).toBe(true);
+    expect(daycareApi.getWeek).not.toHaveBeenCalled();
+  });
+
+  test("unlockWeek forwards an explicit Idempotency-Key and requests then refetches the week, prep and shopping", async () => {
+    resetMocks();
+    daycareApi.unlockWeek.mockResolvedValue(ok({ week_start: "2026-01-05", unlocked_at: "2026-01-07T00:00:00Z" }));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getWeek.mockClear();
+    daycareApi.getPrep.mockClear();
+    daycareApi.getShopping.mockClear();
+
+    const result = await daycare.unlockWeek({ reason: "Routine unlock", force: false }, "44444444-4444-4444-8444-444444444444");
+
+    expect(daycareApi.unlockWeek).toHaveBeenCalledWith(
+      "2026-01-05",
+      { reason: "Routine unlock", force: false },
+      { headers: { "Idempotency-Key": "44444444-4444-4444-8444-444444444444" } },
+    );
+    expect(daycareApi.getWeek).toHaveBeenCalledTimes(1);
+    expect(daycareApi.getPrep).toHaveBeenCalledTimes(1);
+    expect(daycareApi.getShopping).toHaveBeenCalledTimes(1);
+    expect(result.error).toBeNull();
+  });
+
+  test("unlockWeek surfaces an unlock_unsafe conflict as a mapped error while still refetching", async () => {
+    resetMocks();
+    daycareApi.unlockWeek.mockResolvedValue({
+      data: null,
+      error: {
+        response: {
+          status: 409,
+          data: { error: { code: "unlock_unsafe", message: "Unlocking this week isn't safe.", details: { week_start: "2026-01-05", plan: { safe: false, reasons: ["food already used"] } } } },
+        },
+      },
+    });
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getWeek.mockClear();
+
+    const result = await daycare.unlockWeek({ reason: "Routine unlock", force: false });
+
+    expect(result.data).toBeNull();
+    expect(result.error?.code).toEqual("unlock_unsafe");
+    expect(daycareApi.getWeek).toHaveBeenCalledTimes(1);
   });
 
   test("updateSettings requests then refetches settings only", async () => {

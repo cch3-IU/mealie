@@ -17,6 +17,11 @@ export const vuetifyStubs = {
   VCardActions: { template: "<div><slot /></div>" },
   VCardText: { template: "<div><slot /></div>" },
   VCardTitle: { template: "<div><slot /></div>" },
+  VCheckbox: {
+    props: ["modelValue", "label"],
+    emits: ["update:modelValue"],
+    template: "<label><input type=\"checkbox\" :checked=\"modelValue\" @change=\"$emit('update:modelValue', $event.target.checked)\">{{ label }}</label>",
+  },
   VChip: { template: "<span class=\"v-chip\"><slot /></span>" },
   VCol: { template: "<div><slot /></div>" },
   VContainer: { template: "<div><slot /></div>" },
@@ -67,6 +72,11 @@ export const vuetifyStubs = {
     template: "<select :value=\"modelValue\" @change=\"$emit('update:modelValue', $event.target.value)\"><option v-for=\"item in items\" :key=\"item\" :value=\"item\">{{ item }}</option></select>",
   },
   VTable: { template: "<table><slot /></table>" },
+  VTextarea: {
+    props: ["modelValue"],
+    emits: ["update:modelValue"],
+    template: "<textarea :value=\"modelValue\" @input=\"$emit('update:modelValue', $event.target.value)\" />",
+  },
   VToolbar: { template: "<div><slot /></div>" },
   VToolbarTitle: { template: "<div><slot /></div>" },
 };

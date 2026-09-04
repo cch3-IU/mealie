@@ -8,6 +8,8 @@ import type {
   PublishRequest,
   RecipeDaycareUpdate,
   SimpleFoodUpdate,
+  UnlockPlan,
+  UnlockRequest,
   Weekday,
 } from "~/lib/api/types/daycare";
 
@@ -80,6 +82,19 @@ export function committedAtFromError(error: DaycareUiError | null): string | nul
   if (!error || error.code !== "week_committed") return null;
   const committedAt = error.details?.committed_at;
   return typeof committedAt === "string" ? committedAt : null;
+}
+
+/**
+ * The unlock plan carried in a 409 `unlock_unsafe` response's `details.plan` — nested under
+ * a `plan` key (`{week_start, details: {week_start, plan: {...}}}`), not spread directly into
+ * `details`. The sidecar sends the exact `GET .../unlock-preview` (`UnlockPlan`) shape there, so
+ * a dialog can adopt the latest known state without a second read.
+ */
+export function unlockPlanFromError(error: DaycareUiError | null): UnlockPlan | null {
+  if (!error || error.code !== "unlock_unsafe" || !error.details) return null;
+  const plan = error.details.plan;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) return null;
+  return plan as UnlockPlan;
 }
 
 const WEEKDAY_ORDER: Weekday[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -302,6 +317,33 @@ export function useDaycare(options: UseDaycareOptions = {}) {
   }
 
   /**
+   * The unlock preview is a read: fetched on demand whenever a caller needs to show
+   * what unlocking a completed week would do before committing to it.
+   */
+  async function getUnlockPreview() {
+    const result = await api.daycare.getUnlockPreview(selectedWeek.value);
+    return result.data
+      ? { data: result.data, error: null as DaycareUiError | null }
+      : { data: null, error: mapDaycareError(result.error) };
+  }
+
+  /**
+   * `idempotencyKey`, when passed, lets a caller resend the exact same key on a
+   * retry (e.g. resubmitting with `force: true` after a `unlock_unsafe` 409) so the
+   * sidecar replays the same logical mutation rather than treating it as a second one.
+   */
+  async function unlockWeek(payload?: UnlockRequest, idempotencyKey?: string) {
+    return await runMutation(
+      () => api.daycare.unlockWeek(
+        selectedWeek.value,
+        payload,
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      ),
+      refreshWeekScoped,
+    );
+  }
+
+  /**
    * The completion preview is a read: fetched on demand (never on mount)
    * whenever a caller needs to show what completing the week would do.
    */
@@ -397,6 +439,8 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     undoCompleteWeek,
     getCompletionPreview,
     getCommitReceipt,
+    getUnlockPreview,
+    unlockWeek,
     updateSettings,
     updateRecipeDaycare,
     updateSimpleFood,

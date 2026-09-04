@@ -32,7 +32,11 @@
           :error="daycare.week.error.value"
           :mutating="daycare.mutating.value"
           :offline="daycare.isOffline.value"
+          :is-admin="daycare.isAdmin.value"
+          :get-unlock-preview="daycare.getUnlockPreview"
+          :unlock-week="daycare.unlockWeek"
           @regenerate="onRegenerate"
+          @unlocked="onUnlocked"
         />
       </v-col>
       <v-col cols="12">
@@ -187,5 +191,9 @@ function onPrepCompleted() {
 
 function onPrepUndone() {
   alert.success(i18n.t("daycare.prep.undo-success"));
+}
+
+function onUnlocked() {
+  alert.success(i18n.t("daycare.plan.unlock-success-toast"));
 }
 </script>

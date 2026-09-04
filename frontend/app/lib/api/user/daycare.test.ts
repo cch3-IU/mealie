@@ -60,6 +60,12 @@ describe("DaycareAPI reads", () => {
     expect(requests.get).toHaveBeenCalledWith("/api/daycare/v1/weeks/2026-09-07/commit-receipt", undefined, undefined);
   });
 
+  test("getUnlockPreview is a plain read with no Idempotency-Key header", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).getUnlockPreview("2026-09-07");
+    expect(requests.get).toHaveBeenCalledWith("/api/daycare/v1/weeks/2026-09-07/unlock-preview", undefined, undefined);
+  });
+
   test("getRecipeDaycare shapes the recipe slug into the path", async () => {
     const requests = createRequests();
     await new DaycareAPI(requests).getRecipeDaycare("chicken-barley-soup");
@@ -118,6 +124,15 @@ describe("DaycareAPI mutations attach a fresh Idempotency-Key", () => {
     expect(completeCall[2]?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
     expect(undoCall[0]).toEqual("/api/daycare/v1/weeks/2026-09-07/undo-complete");
     expect(undoCall[2]?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
+  });
+
+  test("unlockWeek posts to the unlock path forwarding reason/force with a UUID header", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).unlockWeek("2026-09-07", { reason: "captain override", force: true });
+    const [url, body, config] = vi.mocked(requests.post).mock.calls[0];
+    expect(url).toEqual("/api/daycare/v1/weeks/2026-09-07/unlock");
+    expect(body).toEqual({ reason: "captain override", force: true });
+    expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
   });
 
   test("updateSettings PUTs with a UUID header (admin-only route, enforced server-side)", async () => {

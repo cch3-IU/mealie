@@ -13,6 +13,11 @@
           <template v-if="week.committed_at">
             {{ $t("daycare.plan.week-locked-on", { date: committedAtText }) }}
           </template>
+          <div v-if="isAdmin && week.unlock?.available" class="mt-2">
+            <v-btn variant="text" size="small" class="px-0" :disabled="offline || mutating" @click="unlockDialogOpen = true">
+              {{ $t("daycare.plan.unlock-week") }}
+            </v-btn>
+          </div>
         </v-alert>
         <v-alert v-if="week.stale" type="warning" variant="tonal" density="comfortable" class="mb-2">
           {{ $t("daycare.plan.stale-notice", { reason: week.stale_reason }) }}
@@ -70,14 +75,24 @@
         {{ $t("daycare.plan.regenerate-confirm-stale-warning", { reason: week.stale_reason }) }}
       </v-alert>
     </BaseDialog>
+
+    <DaycareUnlockDialog
+      v-if="isAdmin"
+      :key="week?.week_start ?? 'none'"
+      v-model="unlockDialogOpen"
+      :get-unlock-preview="getUnlockPreview"
+      :unlock-week="unlockWeek"
+      @unlocked="$emit('unlocked', $event)"
+    />
   </v-card>
 </template>
 
 <script setup lang="ts">
 import DaycareErrorState from "./DaycareErrorState.vue";
+import DaycareUnlockDialog from "./DaycareUnlockDialog.vue";
 import { summarizePlanWeek } from "~/composables/daycare/daycare-summary";
 import type { DaycareUiError } from "~/composables/daycare/use-daycare";
-import type { WeekResponse } from "~/lib/api/types/daycare";
+import type { UnlockPreview, UnlockReceipt, UnlockRequest, WeekResponse } from "~/lib/api/types/daycare";
 
 interface Props {
   week: WeekResponse | null;
@@ -86,15 +101,20 @@ interface Props {
   error: DaycareUiError | null;
   mutating: boolean;
   offline: boolean;
+  isAdmin: boolean;
+  getUnlockPreview: () => Promise<{ data: UnlockPreview | null; error: DaycareUiError | null }>;
+  unlockWeek: (payload: UnlockRequest, idempotencyKey: string) => Promise<{ data: UnlockReceipt | null; error: DaycareUiError | null }>;
 }
 const props = defineProps<Props>();
 
 defineEmits<{
   regenerate: [];
+  unlocked: [UnlockReceipt];
 }>();
 
 const showWeek = ref(false);
 const confirmOpen = ref(false);
+const unlockDialogOpen = ref(false);
 
 const summary = computed(() => summarizePlanWeek(props.week?.plan));
 const committedAtText = computed(() => (props.week?.committed_at ? new Date(props.week.committed_at).toLocaleString() : ""));

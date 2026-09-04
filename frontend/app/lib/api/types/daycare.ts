@@ -380,6 +380,8 @@ export interface WeekResponse {
   artifacts: Record<string, string>;
   publication: PublicationStatus;
   plan: WeekPlan;
+  /** Absent on a sidecar that predates the unlock feature — callers must treat a missing/falsy `available` as "hide the action", not an error. */
+  unlock?: UnlockAvailability;
 }
 
 export type PublicationOutcomeStatus = "published" | "pending" | "ambiguous" | "failed" | "dry_run";
@@ -531,6 +533,85 @@ export interface UndoResult {
   undone_at: string;
   deleted_leftover_lot_ids: number[];
   restored_source_lots: Record<string, unknown>[];
+}
+
+// ---------------------------------------------------------------------------
+// Unlock (uncommit a completed week)
+// ---------------------------------------------------------------------------
+
+export interface UnlockAvailability {
+  available: boolean;
+  safe: boolean;
+  reasons: string[];
+}
+
+export interface UnlockCreatedLot {
+  lot_id: number;
+  recipe_slug: string;
+  portions: number;
+  /** null if the lot no longer exists. */
+  current_portions_remaining: number | null;
+  exists: boolean;
+  /** The lot was consumed, edited, or deleted since completion. */
+  touched: boolean;
+  made_date: string | null;
+  use_by: string | null;
+  storage: string | null;
+}
+
+export interface UnlockSourceLot {
+  lot_id: number;
+  recipe_slug: string | null;
+  portions: number;
+  exists: boolean;
+}
+
+export interface UnlockReservationRow {
+  week_start: string;
+  recipe_slug: string;
+  portions: number;
+}
+
+export interface UnlockPlan {
+  week_start: string;
+  /** Leftover lots this completion created. */
+  created_lots: UnlockCreatedLot[];
+  /** Pre-existing lots this completion drew down. */
+  consumed_source_lots: UnlockSourceLot[];
+  /**
+   * A consumed source lot no longer exists; unlock always refuses (even with force) rather
+   * than drop those portions — when true, the dialog must not offer a force retry at all.
+   */
+  missing_source_lot: boolean;
+  /** Later-week reservations backed by the created lots. */
+  affected_reservations: UnlockReservationRow[];
+  affected_weeks: string[];
+  safe: boolean;
+  reasons: string[];
+}
+
+export type UnlockPreview = UnlockPlan;
+
+export interface UnlockRequest {
+  /** Required and non-blank — the sidecar 422s a missing field and 400s a blank one (`unlock_reason_required`). */
+  reason: string;
+  force?: boolean;
+}
+
+export interface UnlockReceipt {
+  schema_version: number;
+  week_start: string;
+  unlocked_at: string;
+  reason: string;
+  admin_user: string | null;
+  forced: boolean;
+  deleted_leftover_lot_ids: number[];
+  restored_source_lots: { lot_id: number; portions: number }[];
+  released_reservations: UnlockReservationRow[];
+  affected_weeks: string[];
+  downstream_weeks_marked_stale: string[];
+  /** Present on the sidecar's Artifact-typed response (extra="allow"); added post-hoc by the service, not modeled in `UnlockResult`. */
+  receipt_path?: string | null;
 }
 
 // ---------------------------------------------------------------------------
