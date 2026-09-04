@@ -106,6 +106,25 @@ describe("RecipeIngredientWritebackDialog preview", () => {
     expect(wrapper.text()).toContain("a pinch of salt");
   });
 
+  test("falls back to the note when nothing structured and no original text is available", async () => {
+    const getPreview = vi.fn(() => Promise.resolve({
+      data: previewFixture({
+        rows: [{
+          index: 0,
+          before: { quantity: null, unit: null, food: null, note: "to taste", original_text: null, reference_id: "ref-3" },
+          after: { quantity: null, unit: null, food: null, note: "to taste", original_text: null, reference_id: "ref-3" },
+          status: "plain_no_quantity",
+        }],
+      }),
+      error: null,
+    }));
+    const wrapper = mountDialog({ getPreview });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("to taste");
+    expect(wrapper.text()).not.toContain("(empty)");
+  });
+
   test("shows what foods/units would be created and any ambiguities", async () => {
     const getPreview = vi.fn(() => Promise.resolve({
       data: previewFixture({
@@ -225,6 +244,33 @@ describe("RecipeIngredientWritebackDialog apply", () => {
 
     expect(wrapper.text()).toContain("\"broth\" could mean Chicken Broth or Beef Broth.");
     expect(wrapper.find(".submit").exists()).toBe(true);
+  });
+});
+
+describe("RecipeIngredientWritebackDialog idempotency keys", () => {
+  test("a repeat Apply after an Undo, within the same open dialog, uses a fresh Idempotency-Key", async () => {
+    const applyWriteback = vi.fn(() => Promise.resolve({ data: receiptFixture(), error: null }));
+    const undoWriteback = vi.fn(() => Promise.resolve({ data: { slug: "chicken-barley-soup", restored_at: "2026-01-02T00:00:00Z", rows_restored: 3 }, error: null }));
+    const getPreview = vi.fn(() => Promise.resolve({ data: previewFixture(), error: null }));
+    const wrapper = mountDialog({ applyWriteback, undoWriteback, getPreview });
+    await flushPromises();
+
+    await wrapper.find(".submit").trigger("click");
+    await flushPromises();
+
+    await wrapper.findAll("button").find(b => b.text() === "Undo")!.trigger("click");
+    await wrapper.find(".confirm").trigger("click");
+    await flushPromises();
+
+    await wrapper.find(".submit").trigger("click");
+    await flushPromises();
+
+    expect(applyWriteback).toHaveBeenCalledTimes(2);
+    const firstKey = applyWriteback.mock.calls[0][0];
+    const secondKey = applyWriteback.mock.calls[1][0];
+    expect(firstKey).toMatch(UUID_RE);
+    expect(secondKey).toMatch(UUID_RE);
+    expect(secondKey).not.toBe(firstKey);
   });
 });
 

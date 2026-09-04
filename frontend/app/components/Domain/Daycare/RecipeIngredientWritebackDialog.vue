@@ -179,12 +179,14 @@ const dialogTitle = computed(() => {
   return i18n.t("daycare.recipe.writeback-dialog-title");
 });
 
-/** "quantity unit food — note", falling back to the original ingredient text when nothing was structured. */
+/** "quantity unit food — note", falling back to the original text, then the note alone, then "(empty)". */
 function formatIngredient(ingredient: IngredientWritebackIngredient): string {
   const parts = [ingredient.quantity, ingredient.unit, ingredient.food].filter((p): p is string | number => p != null && p !== "");
   const structured = parts.join(" ");
-  const withNote = structured && ingredient.note ? `${structured} (${ingredient.note})` : structured;
-  return withNote || ingredient.original_text || i18n.t("daycare.recipe.writeback-empty-ingredient");
+  if (structured) {
+    return ingredient.note ? `${structured} (${ingredient.note})` : structured;
+  }
+  return ingredient.original_text || ingredient.note || i18n.t("daycare.recipe.writeback-empty-ingredient");
 }
 
 function statusColor(status: IngredientWritebackRowStatus): string | undefined {
@@ -212,6 +214,8 @@ function errorMessage(error: DaycareUiError): string {
 async function loadPreview() {
   phase.value = "loading";
   applyErrorMessage.value = null;
+  applyKey = newIdempotencyKey();
+  undoKey = newIdempotencyKey();
   const result = await props.getPreview();
   if (result.data) {
     preview.value = result.data;
@@ -268,8 +272,6 @@ async function onUndo() {
 }
 
 function arm() {
-  applyKey = newIdempotencyKey();
-  undoKey = newIdempotencyKey();
   preview.value = null;
   receipt.value = null;
   applyErrorMessage.value = null;
