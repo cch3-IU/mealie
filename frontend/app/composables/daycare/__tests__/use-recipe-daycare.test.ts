@@ -1,4 +1,5 @@
 import { flushPromises } from "@vue/test-utils";
+import { effectScope } from "vue";
 import { describe, expect, test, vi } from "vitest";
 import {
   currentWeekStart,
@@ -385,6 +386,23 @@ describe("useRecipeDaycare", () => {
     );
     expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
     expect(daycare.preparedPortions.value).toEqual({ physical: 8, reserved: 0, free: 8 });
+  });
+
+  test("a lot created by one instance refreshes another instance's inventory for the same recipe (and not the creator's twice)", async () => {
+    resetMocks();
+    const createdLot = { id: 9, recipe_slug: "chicken-barley-soup", portions_remaining: 8, made_date: "2026-01-01", use_by: null, storage: "freezer", notes: null, created_at: "x", updated_at: "x" };
+    const inventoryOf = (physical: number) => ok({ lots: [], totals: { "chicken-barley-soup": { physical, reserved: 0, free: physical } }, summary: { lot_count: 1, physical, reserved: 0, free: physical } });
+    daycareApi.createLot.mockResolvedValue(ok(createdLot));
+    daycareApi.getInventory.mockResolvedValue(inventoryOf(8));
+
+    const scope = effectScope();
+    const [creator, other] = scope.run(() => [useRecipeDaycare("chicken-barley-soup"), useRecipeDaycare("chicken-barley-soup")])!;
+    await creator.createLot({ portions: 8, made_date: "2026-01-01", storage: "freezer" });
+    await flushPromises();
+
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(2); // creator's own refetch + the other instance's
+    expect(other.preparedPortions.value?.physical).toEqual(8);
+    scope.stop();
   });
 
   test("createLot maps a failure without refetching inventory", async () => {

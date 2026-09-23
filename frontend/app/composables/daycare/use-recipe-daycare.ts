@@ -99,6 +99,27 @@ export function deriveProcessingNote(processing: ProcessingStatus | null | undef
   };
 }
 
+/** The lot a one-serving take-off should come from: soonest use-by (no use-by sorts last), then oldest made date. */
+export function pickLotToConsume(lots: Lot[], slug: string): Lot | null {
+  const candidates = lots.filter(lot => lot.recipe_slug === slug && lot.portions_remaining > 0);
+  candidates.sort((a, b) =>
+    (a.use_by ?? "9999-12-31").localeCompare(b.use_by ?? "9999-12-31")
+    || (a.made_date ?? "9999-12-31").localeCompare(b.made_date ?? "9999-12-31")
+    || a.id - b.id,
+  );
+  return candidates[0] ?? null;
+}
+
+/** The lot a one-serving add should go to: the most recently made (ties broken by newest lot). */
+export function pickLotToAdd(lots: Lot[], slug: string): Lot | null {
+  const candidates = lots.filter(lot => lot.recipe_slug === slug);
+  candidates.sort((a, b) =>
+    (b.made_date ?? "").localeCompare(a.made_date ?? "")
+    || b.id - a.id,
+  );
+  return candidates[0] ?? null;
+}
+
 /** Per-slot roles this recipe is used with, as edited in the panel's form. */
 export type SlotRoles = Partial<Record<Slot, Role[]>>;
 
@@ -161,6 +182,14 @@ async function fill<T>(resource: Resource<T>, fetcher: () => Promise<{ data: T |
 }
 
 /**
+ * Bumped whenever any `useRecipeDaycare` instance changes inventory (creates a lot, or +1/-1), so
+ * other instances on the same page (the panel, the native "I Made This" dialog's inventory section,
+ * the counter under its button) refetch their own inventory without a reload. `origin` lets the
+ * changing instance skip refetching what it just refetched.
+ */
+export const inventoryChanged = ref<{ n: number; slug: string; origin: symbol | null }>({ n: 0, slug: "", origin: null });
+
+/**
  * Compact, recipe-scoped daycare data for the recipe page panel. Deliberately does not reuse
  * `useDaycare()` (the dashboard composable) — that loads the whole household's status, settings,
  * week, prep, shopping, inventory, reservations, and processing on every recipe page view. This
@@ -170,6 +199,7 @@ async function fill<T>(resource: Resource<T>, fetcher: () => Promise<{ data: T |
 export function useRecipeDaycare(slug: Ref<string> | string) {
   const api = useUserApi();
   const slugValue = () => (typeof slug === "string" ? slug : slug.value);
+  const instanceId = Symbol("recipe-daycare");
 
   const recipeDaycare = emptyResource<RecipeDaycare>();
   const inventory = emptyResource<InventoryResponse>();
@@ -183,6 +213,16 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
   const preparedPortions = computed(() => inventory.data.value?.totals[slugValue()] ?? null);
   const nextPlannedUse = computed(() => findNextPlannedUse(week.data.value?.plan, slugValue()));
   const processingNote = computed(() => deriveProcessingNote(processing.data.value, slugValue()));
+
+  // Only inside a component/effect scope, so the watcher is disposed with its owner rather than leaking.
+  if (getCurrentScope()) {
+    watch(() => inventoryChanged.value.n, () => {
+      const { slug: createdSlug, origin } = inventoryChanged.value;
+      if (origin !== instanceId && createdSlug === slugValue()) {
+        fill(inventory, () => api.daycare.getInventory());
+      }
+    });
+  }
 
   async function load() {
     forbidden.value = false;
@@ -229,6 +269,49 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
       );
       if (result.data) {
         await fill(inventory, () => api.daycare.getInventory());
+        notifyInventoryChanged();
+        return { data: result.data, error: null };
+      }
+      return { data: null, error: mapDaycareError(result.error) };
+    }
+    finally {
+      mutating.value = false;
+    }
+  }
+
+  function notifyInventoryChanged() {
+    inventoryChanged.value = { n: inventoryChanged.value.n + 1, slug: slugValue(), origin: instanceId };
+  }
+
+  /** The recipe's counter `-`: takes one serving off the lot picked by `pickLotToConsume`, letting it cut into planner set-asides. */
+  async function consumeOne(): Promise<{ data: Lot | null; error: DaycareUiError | null }> {
+    const lot = pickLotToConsume(inventory.data.value?.lots ?? [], slugValue());
+    if (!lot) return { data: null, error: { status: null, code: null, message: null, kind: "not-found", details: null } };
+    mutating.value = true;
+    try {
+      const result = await api.daycare.consumeLot(lot.id, { portions: 1, release_reservations: true });
+      if (result.data) {
+        await fill(inventory, () => api.daycare.getInventory());
+        notifyInventoryChanged();
+        return { data: result.data.lot, error: null };
+      }
+      return { data: null, error: mapDaycareError(result.error) };
+    }
+    finally {
+      mutating.value = false;
+    }
+  }
+
+  /** The recipe's counter `+`: adds one serving to the most recently made lot. */
+  async function addOne(): Promise<{ data: Lot | null; error: DaycareUiError | null }> {
+    const lot = pickLotToAdd(inventory.data.value?.lots ?? [], slugValue());
+    if (!lot) return { data: null, error: { status: null, code: null, message: null, kind: "not-found", details: null } };
+    mutating.value = true;
+    try {
+      const result = await api.daycare.updateLot(lot.id, { portions_remaining: lot.portions_remaining + 1 });
+      if (result.data) {
+        await fill(inventory, () => api.daycare.getInventory());
+        notifyInventoryChanged();
         return { data: result.data, error: null };
       }
       return { data: null, error: mapDaycareError(result.error) };
@@ -312,6 +395,8 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
     load,
     retryInventory,
     createLot,
+    consumeOne,
+    addOne,
     updateRecipeDaycare,
     getIngredientWritebackPreview,
     applyIngredientWriteback,

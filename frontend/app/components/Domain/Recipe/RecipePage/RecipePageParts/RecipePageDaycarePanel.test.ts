@@ -318,9 +318,19 @@ describe("RecipePageDaycarePanel", () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "I Made This");
+    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "Add to Inventory");
     expect(makeThisButton).toBeTruthy();
     expect(wrapper.text()).toContain("4 on hand"); // physical prepared portions from the inventory fixture
+  });
+
+  test("the panel's button is labeled \"Add to Inventory\", never \"I Made This\" (that label belongs to Mealie's native dialog)", async () => {
+    requests = createRequests(happyPathGet);
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const labels = wrapper.findAll("button").map(b => b.text());
+    expect(labels).toContain("Add to Inventory");
+    expect(labels).not.toContain("I Made This");
   });
 
   test("\"I made this\" still renders when the recipe hasn't been picked up by the daycare sidecar at all (404 not-tracked)", async () => {
@@ -328,7 +338,7 @@ describe("RecipePageDaycarePanel", () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "I Made This");
+    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "Add to Inventory");
     expect(makeThisButton).toBeTruthy();
   });
 
@@ -366,7 +376,7 @@ describe("RecipePageDaycarePanel", () => {
 
     expect(wrapper.text()).toContain("4 on hand");
 
-    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "I Made This")!;
+    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "Add to Inventory")!;
     await makeThisButton.trigger("click");
     const servingsInput = wrapper.find("input[type=\"number\"]");
     await servingsInput.setValue("3");

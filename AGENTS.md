@@ -235,7 +235,7 @@ task docker:prod        # Build and run production Docker compose
 - **Live-verifying daycare UI changes:** point `nuxt dev` at a disposable copy of the sidecar's
   own staging harness (`dev/staging/` in `mealie-daycare-processor`, `up.sh`/`seed.sh`/`token.sh`)
   via `API_URL=http://127.0.0.1:19926 nuxt dev` — never the production stack
-  (`~/services/mealie-stack`, port 9925) or its sibling app on port 4200.
+  (`~/services/mealie-stack`, port 9925) or its sibling app on port 4200. `~/services/mealie-stack` is also where the sidecar repo is checked out: `git clone --shared` it into a scratch dir, and in the clone's `dev/staging/` change the compose project `name:` and the 19925/19926 ports (in `compose.yaml`, `up.sh`, `seed.sh`, `token.sh`) before `up.sh`, so a concurrent lane's staging can't collide.
 - **`frontend/app/composables/api/api-client.ts`'s `delete<T>(url, config)`:** calls axios's own
   `delete` directly with `(url, config)` — axios's `delete`/`get`/`head`/`options` only take two
   arguments, unlike `post`/`put`/`patch`'s `(url, data, config)`. Routing `delete` through the

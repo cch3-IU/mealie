@@ -8,6 +8,7 @@
         :title="$t('recipe.made-this')"
         :submit-text="$t('recipe.add-to-timeline')"
         can-submit
+        :submit-disabled="madeInventory.servingsInvalid.value"
         disable-submit-on-enter
         @submit="createTimelineEvent"
       >
@@ -44,6 +45,14 @@
                 </v-list-item>
               </v-list>
             </div>
+            <!-- OVERLAY(daycare): inventory section, see overlay/README.md (Phase F11) -->
+            <DaycareMadeInventoryFields
+              v-if="madeInventory.available.value"
+              v-model:servings="madeInventory.servings.value"
+              v-model:storage="madeInventory.storage.value"
+              v-model:use-by="madeInventory.useBy.value"
+              :servings-invalid="madeInventory.servingsInvalid.value"
+            />
             <v-container>
               <v-row class="mt-4">
                 <v-col cols="5">
@@ -110,32 +119,37 @@
     <div>
       <div v-if="lastMadeReady" class="d-flex justify-center flex-wrap">
         <v-row no-gutters class="d-flex flex-wrap align-center" style="font-size: larger">
-          <v-tooltip location="bottom">
-            <template #activator="{ props: tooltipProps }">
-              <v-btn
-                rounded
-                variant="outlined"
-                size="large"
-                v-bind="tooltipProps"
-                class="font-weight-400"
-                style="border-color: rgb(var(--v-theme-primary));"
-                @click="madeThisDialog = true"
-              >
-                <v-icon start size="large" color="primary">
-                  {{ $globals.icons.calendar }}
-                </v-icon>
-                <span class="opacity-80">
-                  <strong>{{ $t("general.last-made") }}</strong>
-                  <br>
-                  {{ lastMade ? $d(new Date(lastMade)) : $t("general.never") }}
-                </span>
-                <v-icon end size="large" color="primary">
-                  {{ $globals.icons.createAlt }}
-                </v-icon>
-              </v-btn>
-            </template>
-            <span>{{ $t("recipe.made-this") }}</span>
-          </v-tooltip>
+          <!-- OVERLAY(daycare): column wrapper so the servings-on-hand counter sits centered under the button -->
+          <div class="d-flex flex-column align-center">
+            <v-tooltip location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-btn
+                  rounded
+                  variant="outlined"
+                  size="large"
+                  v-bind="tooltipProps"
+                  class="font-weight-400"
+                  style="border-color: rgb(var(--v-theme-primary));"
+                  @click="madeThisDialog = true"
+                >
+                  <v-icon start size="large" color="primary">
+                    {{ $globals.icons.calendar }}
+                  </v-icon>
+                  <span class="opacity-80">
+                    <strong>{{ $t("general.last-made") }}</strong>
+                    <br>
+                    {{ lastMade ? $d(new Date(lastMade)) : $t("general.never") }}
+                  </span>
+                  <v-icon end size="large" color="primary">
+                    {{ $globals.icons.createAlt }}
+                  </v-icon>
+                </v-btn>
+              </template>
+              <span>{{ $t("recipe.made-this") }}</span>
+            </v-tooltip>
+            <!-- OVERLAY(daycare): servings-on-hand counter under the button, see overlay/README.md (Phase F11) -->
+            <DaycareRecipeInventoryCounter v-if="recipe.slug" :slug="recipe.slug" />
+          </div>
         </v-row>
       </div>
     </div>
@@ -144,6 +158,10 @@
 
 <script setup lang="ts">
 import { whenever } from "@vueuse/core";
+// OVERLAY(daycare): inventory section of this dialog, see overlay/README.md (Phase F11)
+import DaycareMadeInventoryFields from "~/components/Domain/Daycare/DaycareMadeInventoryFields.vue";
+import DaycareRecipeInventoryCounter from "~/components/Domain/Daycare/DaycareRecipeInventoryCounter.vue";
+import { useMadeThisInventory } from "~/composables/daycare/use-made-this-inventory";
 import { formatISO } from "date-fns";
 import { useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
@@ -176,6 +194,9 @@ const newTimelineEventTimestamp = ref<Date>(new Date());
 const newTimelineEventTimestampString = computed(() => {
   return formatISO(newTimelineEventTimestamp.value, { representation: "date" });
 });
+
+// OVERLAY(daycare)
+const madeInventory = useMadeThisInventory(computed(() => props.recipe.slug || ""), madeThisDialog);
 
 const lastMade = ref(props.recipe.lastMade);
 const lastMadeReady = ref(false);
@@ -345,6 +366,9 @@ async function createTimelineEvent() {
   else {
     alert.success(i18n.t("recipe.added-to-timeline"));
   }
+
+  // OVERLAY(daycare): the timeline event above is kept even if this fails; it shows its own error
+  await madeInventory.submit(newTimelineEventTimestampString.value);
 
   resetMadeThisForm();
   emit("eventCreated", newEvent);
