@@ -93,11 +93,6 @@ const global = {
 
 const recipe = { id: "r1", slug: "chicken-barley-soup", name: "Chicken Barley Soup", recipeIngredient: [], lastMade: null };
 
-function localToday(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 async function openDialog(wrapper: ReturnType<typeof mountLastMade>) {
   await flushPromises();
   await wrapper.find("button").trigger("click"); // the native "Last made" / "I Made This" button
