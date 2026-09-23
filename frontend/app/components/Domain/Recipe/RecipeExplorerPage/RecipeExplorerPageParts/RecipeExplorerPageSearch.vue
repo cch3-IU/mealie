@@ -44,6 +44,7 @@
                 density="comfortable"
                 :prepend-icon="state.orderDirection === 'asc' ? $globals.icons.sortAscending : $globals.icons.sortDescending"
                 :title="state.orderDirection === 'asc' ? $t('general.sort-descending') : $t('general.sort-ascending')"
+                :disabled="state.orderBy === SERVINGS_ON_HAND_SORT"
                 @click="toggleOrderDirection"
               />
               <v-divider />
@@ -136,6 +137,8 @@
 <script setup lang="ts">
 import RecipeExplorerPageSearchFilters from "./RecipeExplorerPageSearchFilters.vue";
 import { useRecipeExplorerSearch, clearRecipeExplorerSearchState } from "~/composables/use-recipe-explorer-search";
+import { SERVINGS_ON_HAND_SORT } from "~/composables/daycare/use-servings-on-hand-sort"; // OVERLAY(daycare)
+import { useLoggedInState } from "~/composables/use-logged-in-state"; // OVERLAY(daycare)
 
 const emit = defineEmits<{
   ready: [];
@@ -182,6 +185,8 @@ const sortText = computed(() => {
   return `${sort.name}`;
 });
 
+const { isOwnGroup } = useLoggedInState(); // OVERLAY(daycare)
+
 const sortable = computed(() => [
   {
     icon: $globals.icons.orderAlphabeticalAscending,
@@ -213,6 +218,14 @@ const sortable = computed(() => [
     name: i18n.t("general.random"),
     value: "random",
   },
+  // OVERLAY(daycare): servings-on-hand sort, see overlay/README.md (Phase F12)
+  ...(isOwnGroup.value
+    ? [{
+        icon: $globals.icons.sortDescending,
+        name: i18n.t("daycare.inventory.sort-on-hand"),
+        value: SERVINGS_ON_HAND_SORT,
+      }]
+    : []),
 ]);
 
 // Methods

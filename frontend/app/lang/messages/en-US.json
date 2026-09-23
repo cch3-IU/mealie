@@ -1347,6 +1347,8 @@
       "storage-shelf_stable": "Shelf-Stable",
       "storage-other": "Other",
       "on-hand": "0 on hand|1 on hand|{count} on hand",
+      "sort-on-hand": "Servings on hand",
+      "sort-on-hand-unavailable": "Servings on hand isn't available right now, so recipes are shown in the default order.",
       "make-this": "Add to Inventory",
       "make-this-title": "Add to Inventory",
       "make-this-submit": "Add to Inventory",
