@@ -46,6 +46,9 @@
       <p v-if="unavailable" class="text-medium-emphasis mt-2">
         {{ $t("daycare.inventory.edit-unavailable") }}
       </p>
+      <p v-else-if="deleteUnavailable" class="text-medium-emphasis mt-2">
+        {{ $t("daycare.inventory.delete-unavailable") }}
+      </p>
       <DaycareErrorState v-else-if="errorState" class="mt-2" :error="errorState" />
     </v-form>
   </BaseDialog>
@@ -79,6 +82,7 @@ const dateMenu = ref(false);
 const saving = ref(false);
 const errorState = ref<DaycareUiError | null>(null);
 const unavailable = ref(false);
+const deleteUnavailable = ref(false);
 
 const formValid = computed(() => typeof portions.value === "number" && Number.isFinite(portions.value) && portions.value >= 0);
 
@@ -102,6 +106,7 @@ function reset() {
   saving.value = false;
   errorState.value = null;
   unavailable.value = false;
+  deleteUnavailable.value = false;
   dateMenu.value = false;
 }
 
@@ -114,6 +119,7 @@ async function onSubmit() {
 
   if (!formValid.value) {
     unavailable.value = false;
+    deleteUnavailable.value = false;
     errorState.value = {
       status: null,
       code: null,
@@ -127,6 +133,7 @@ async function onSubmit() {
   saving.value = true;
   errorState.value = null;
   unavailable.value = false;
+  deleteUnavailable.value = false;
 
   const payload: LotPatch = {
     portions_remaining: portions.value!,
@@ -155,6 +162,7 @@ async function onDelete() {
   saving.value = true;
   errorState.value = null;
   unavailable.value = false;
+  deleteUnavailable.value = false;
 
   const result = await props.deleteLot(props.lot.id);
   saving.value = false;
@@ -166,7 +174,7 @@ async function onDelete() {
   }
 
   if (result.error?.status === 404 || result.error?.status === 405) {
-    unavailable.value = true;
+    deleteUnavailable.value = true;
     return;
   }
 

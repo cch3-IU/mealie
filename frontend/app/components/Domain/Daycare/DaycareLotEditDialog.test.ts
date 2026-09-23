@@ -202,6 +202,34 @@ describe("DaycareLotEditDialog", () => {
     expect(wrapper.emitted("deleted")).toBeUndefined();
   });
 
+  test("a bare 404 on delete shows a lot-may-already-be-gone message, not the editing-unavailable message", async () => {
+    const deleteLot = vi.fn(() => Promise.resolve({
+      data: null,
+      error: { status: 404, code: null, message: null, kind: "not-found" as const, details: null },
+    }));
+    const wrapper = mountDialog({ deleteLot });
+
+    await wrapper.find(".delete").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("This lot may have already been removed");
+    expect(wrapper.text()).not.toContain("Editing inventory isn't available yet");
+    expect(wrapper.emitted("deleted")).toBeUndefined();
+  });
+
+  test("a bare 405 on delete also shows the lot-may-already-be-gone message", async () => {
+    const deleteLot = vi.fn(() => Promise.resolve({
+      data: null,
+      error: { status: 405, code: null, message: null, kind: "unknown" as const, details: null },
+    }));
+    const wrapper = mountDialog({ deleteLot });
+
+    await wrapper.find(".delete").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("This lot may have already been removed");
+  });
+
   test("reopening the dialog resets a prior error state", async () => {
     const updateLot = vi.fn(() => Promise.resolve({
       data: null,

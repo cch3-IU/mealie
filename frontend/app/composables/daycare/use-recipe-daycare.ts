@@ -193,8 +193,8 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
       forbidden.value = true;
       return;
     }
-    if (kind) {
-      // Unreachable/offline/server/unknown — surfaced via recipeDaycare.error; skip the rest.
+    if (kind === "offline" || kind === "unreachable") {
+      // The sidecar itself is unreachable — inventory/processing/week would fail the same way.
       return;
     }
 

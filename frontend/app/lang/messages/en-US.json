@@ -1341,6 +1341,7 @@
       "edit-lot-title": "Edit Prepared Food",
       "portions-invalid": "Enter a portions amount of 0 or more.",
       "edit-unavailable": "Editing inventory isn't available yet. Try again shortly.",
+      "delete-unavailable": "This lot may have already been removed. Refresh to check.",
       "storage-freezer": "Freezer",
       "storage-refrigerator": "Refrigerator",
       "storage-shelf_stable": "Shelf-Stable",

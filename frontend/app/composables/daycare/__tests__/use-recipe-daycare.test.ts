@@ -17,6 +17,7 @@ const daycareApi = {
   getWeek: vi.fn(),
   getProcessingStatus: vi.fn(),
   updateRecipeDaycare: vi.fn(),
+  createLot: vi.fn(),
   getIngredientWritebackPreview: vi.fn(),
   applyIngredientWriteback: vi.fn(),
   undoIngredientWriteback: vi.fn(),
@@ -298,6 +299,24 @@ describe("useRecipeDaycare", () => {
     expect(daycareApi.getProcessingStatus).not.toHaveBeenCalled();
   });
 
+  test("a 500 (pending-classification quirk) still loads inventory/processing/week so on-hand stays visible", async () => {
+    resetMocks();
+    daycareApi.getRecipeDaycare.mockResolvedValue(httpError(500, "internal_error"));
+    daycareApi.getSettings.mockResolvedValue(ok(settingsFixture));
+    daycareApi.getInventory.mockResolvedValue(ok({ lots: [], totals: { "chicken-barley-soup": { physical: 8, reserved: 0, free: 8 } }, summary: { lot_count: 1, physical: 8, reserved: 0, free: 8 } }));
+    daycareApi.getProcessingStatus.mockResolvedValue(ok(processingFixture()));
+    daycareApi.getWeek.mockResolvedValue(ok({ plan: { days: [] } }));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    await daycare.load();
+
+    expect(daycare.forbidden.value).toBe(false);
+    expect(daycare.recipeDaycare.error.value?.kind).toEqual("server");
+    expect(daycare.preparedPortions.value).toEqual({ physical: 8, reserved: 0, free: 8 });
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(daycareApi.getProcessingStatus).toHaveBeenCalledTimes(1);
+  });
+
   test("inventory, processing, and settings fetch concurrently, not sequentially", async () => {
     resetMocks();
     daycareApi.getRecipeDaycare.mockResolvedValue(ok(recipeDaycareFixture));
@@ -346,6 +365,38 @@ describe("useRecipeDaycare", () => {
     expect(daycare.preparedPortions.value).toEqual({ physical: 4, reserved: 0, free: 4 });
     expect(daycareApi.getInventory).toHaveBeenCalledTimes(2);
     expect(daycareApi.getRecipeDaycare).not.toHaveBeenCalled();
+  });
+
+  test("createLot sends this recipe's slug, refetches inventory, and toggles mutating", async () => {
+    resetMocks();
+    const createdLot = { id: 9, recipe_slug: "chicken-barley-soup", portions_remaining: 8, made_date: "2026-01-01", use_by: null, storage: "freezer", notes: null, created_at: "x", updated_at: "x" };
+    daycareApi.createLot.mockResolvedValue(ok(createdLot));
+    daycareApi.getInventory.mockResolvedValue(ok({ lots: [createdLot], totals: { "chicken-barley-soup": { physical: 8, reserved: 0, free: 8 } }, summary: { lot_count: 1, physical: 8, reserved: 0, free: 8 } }));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    expect(daycare.mutating.value).toBe(false);
+    const result = await daycare.createLot({ portions: 8, made_date: "2026-01-01", storage: "freezer" }, "11111111-1111-4111-8111-111111111111");
+
+    expect(result.data).toEqual(createdLot);
+    expect(daycare.mutating.value).toBe(false);
+    expect(daycareApi.createLot).toHaveBeenCalledWith(
+      { portions: 8, made_date: "2026-01-01", storage: "freezer", recipe_slug: "chicken-barley-soup" },
+      { headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" } },
+    );
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(daycare.preparedPortions.value).toEqual({ physical: 8, reserved: 0, free: 8 });
+  });
+
+  test("createLot maps a failure without refetching inventory", async () => {
+    resetMocks();
+    daycareApi.createLot.mockResolvedValue(httpError(422, "validation_error", "Enter a servings amount greater than 0."));
+
+    const daycare = useRecipeDaycare("chicken-barley-soup");
+    const result = await daycare.createLot({ portions: 0 });
+
+    expect(result.data).toBeNull();
+    expect(result.error?.kind).toEqual("validation");
+    expect(daycareApi.getInventory).not.toHaveBeenCalled();
   });
 
   test("updateRecipeDaycare replaces recipeDaycare.data on success", async () => {
