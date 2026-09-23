@@ -80,6 +80,7 @@
 import { formatISO } from "date-fns";
 import DaycareErrorState from "./DaycareErrorState.vue";
 import { newIdempotencyKey } from "~/lib/api/user/daycare";
+import { isValidServings, STORAGE_LOCATIONS } from "~/composables/daycare/use-made-this-inventory";
 import type { DaycareUiError } from "~/composables/daycare/use-daycare";
 import type { Lot, LotCreate, StorageLocation } from "~/lib/api/types/daycare";
 
@@ -96,7 +97,7 @@ const emit = defineEmits<{
 
 const i18n = useI18n();
 
-const STORAGE_OPTIONS = (["freezer", "refrigerator", "shelf_stable", "other"] as StorageLocation[])
+const STORAGE_OPTIONS = STORAGE_LOCATIONS
   .map(value => ({ value, title: i18n.t(`daycare.inventory.storage-${value}`) }));
 
 function today(): string {
@@ -115,7 +116,7 @@ const errorState = ref<DaycareUiError | null>(null);
  * submit replays rather than creates a second lot. */
 let idempotencyKey = newIdempotencyKey();
 
-const formValid = computed(() => typeof servings.value === "number" && Number.isFinite(servings.value) && servings.value > 0);
+const formValid = computed(() => isValidServings(servings.value));
 
 const madeDatePickerDate = computed<Date>(() => new Date(`${madeDate.value}T00:00:00`));
 const useByPickerDate = computed<Date | null>(() => (useBy.value ? new Date(`${useBy.value}T00:00:00`) : null));

@@ -13,6 +13,8 @@
         :to="$attrs.selected ? undefined : recipeRoute"
         @click="$emit('selected')"
       >
+        <!-- OVERLAY(daycare): servings-on-hand badge, see overlay/README.md (Phase F11) -->
+        <DaycareOnHandBadge :slug="slug" />
         <v-img
           v-if="vertical"
           class="rounded-sm"
@@ -138,6 +140,7 @@ import RecipeChips from "./RecipeChips.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import type { ContextMenuItem } from "./RecipeContextMenu/RecipeContextMenu.vue";
+import DaycareOnHandBadge from "~/components/Domain/Daycare/DaycareOnHandBadge.vue"; // OVERLAY(daycare)
 
 interface Props {
   name: string;

@@ -14,6 +14,8 @@
         :min-height="imageHeight + 75"
         @click.self="$emit('click')"
       >
+        <!-- OVERLAY(daycare): servings-on-hand badge, see overlay/README.md (Phase F11) -->
+        <DaycareOnHandBadge :slug="slug" />
         <RecipeCardImage
           small
           :icon-size="imageHeight"
@@ -107,6 +109,7 @@ import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeChips from "./RecipeChips.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
+import DaycareOnHandBadge from "~/components/Domain/Daycare/DaycareOnHandBadge.vue"; // OVERLAY(daycare)
 import RecipeCardRating from "./RecipeCardRating.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 
