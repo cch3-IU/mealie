@@ -83,6 +83,18 @@
               <v-list-item-title>{{ $t("general.last-made") }}</v-list-item-title>
             </div>
           </v-list-item>
+          <!-- OVERLAY(daycare): servings-on-hand sort, see overlay/README.md (Phase F12) -->
+          <v-list-item
+            v-if="isOwnGroup"
+            @click="sortRecipes(EVENTS.servingsOnHand)"
+          >
+            <div class="d-flex align-center flex-nowrap">
+              <v-icon class="mr-2" inline>
+                {{ $globals.icons.sortDescending }}
+              </v-icon>
+              <v-list-item-title>{{ $t("daycare.inventory.sort-on-hand") }}</v-list-item-title>
+            </div>
+          </v-list-item>
           <v-list-item @click="sortRecipes(EVENTS.shuffle)">
             <div class="d-flex align-center flex-nowrap">
               <v-icon class="mr-2" inline>
@@ -105,6 +117,17 @@
         @toggle-dense-view="toggleMobileCards()"
       />
     </v-row>
+    <!-- OVERLAY(daycare): shown when the servings-on-hand sort fell back to the default order -->
+    <v-alert
+      v-if="servingsOnHandSort.unavailable.value && orderByInUse === SERVINGS_ON_HAND_SORT"
+      class="mb-2"
+      type="info"
+      variant="tonal"
+      density="compact"
+      data-testid="on-hand-sort-notice"
+    >
+      {{ $t("daycare.inventory.sort-on-hand-unavailable") }}
+    </v-alert>
     <div v-if="recipes && ready">
       <div class="mt-2">
         <v-row v-if="!useMobileCards">
@@ -174,6 +197,7 @@ import { useLazyRecipes } from "~/composables/recipes";
 import type { Recipe } from "~/lib/api/types/recipe";
 import { useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
+import { SERVINGS_ON_HAND_SORT, useServingsOnHandSort } from "~/composables/daycare/use-servings-on-hand-sort"; // OVERLAY(daycare)
 
 const REPLACE_RECIPES_EVENT = "replaceRecipes";
 const APPEND_RECIPES_EVENT = "appendRecipes";
@@ -212,6 +236,7 @@ const EVENTS = {
   updated: "updated",
   lastMade: "lastMade",
   shuffle: "shuffle",
+  servingsOnHand: "servingsOnHand", // OVERLAY(daycare)
 };
 
 const auth = useMealieAuth();
@@ -238,6 +263,9 @@ const ready = ref(false);
 const loading = ref(false);
 
 const { fetchMore, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
+const servingsOnHandSort = useServingsOnHandSort(); // OVERLAY(daycare)
+let headCount = 0; // OVERLAY(daycare): leading recipes of the last fetch that are not part of the paginated list
+const orderByInUse = computed(() => props.query?.orderBy || preferences.value.orderBy); // OVERLAY(daycare)
 const { savePosition, getSavedPage, restorePosition } = useScrollPosition();
 const router = useRouter();
 
@@ -266,6 +294,18 @@ async function fetchRecipes(pageCount = 1) {
   if (orderBy === "random") {
     localQuery._searchSeed = randomSeed.value;
   }
+  // OVERLAY(daycare): servings-on-hand sort is assembled client-side (in-stock head + paginated tail)
+  if (orderBy === SERVINGS_ON_HAND_SORT) {
+    const result = await servingsOnHandSort.fetchPage(fetchMore, {
+      page: page.value,
+      perPage: perPage * pageCount,
+      query: localQuery,
+      queryFilter: queryFilter.value,
+    });
+    headCount = result.headCount;
+    return result.recipes;
+  }
+  headCount = 0;
   return await fetchMore(
     page.value,
     perPage * pageCount,
@@ -286,7 +326,7 @@ onMounted(async () => {
     page.value = 1;
     hasMore.value = true;
     const newRecipes = await fetchRecipes(savedPage);
-    if (newRecipes.length < perPage * savedPage) {
+    if (newRecipes.length - headCount < perPage * savedPage) { // OVERLAY(daycare): headCount
       hasMore.value = false;
     }
     page.value = savedPage;
@@ -328,7 +368,7 @@ async function initRecipes() {
   // we double-up the first call to avoid a bug with large screens that render
   // the entire first page without scrolling, preventing additional loading
   const newRecipes = await fetchRecipes(page.value + 1);
-  if (newRecipes.length < perPage) {
+  if (newRecipes.length - headCount < perPage) { // OVERLAY(daycare): headCount
     hasMore.value = false;
   }
 
@@ -347,7 +387,7 @@ const infiniteScroll = useThrottleFn(async () => {
   page.value = page.value + 1;
 
   const newRecipes = await fetchRecipes();
-  if (newRecipes.length < perPage) {
+  if (newRecipes.length - headCount < perPage) { // OVERLAY(daycare): headCount
     hasMore.value = false;
   }
   if (newRecipes.length) {
@@ -415,6 +455,12 @@ async function sortRecipes(sortType: string) {
         "desc",
         true,
       );
+      break;
+    case EVENTS.servingsOnHand: // OVERLAY(daycare): direction is fixed (most servings first); re-selecting just refreshes
+      preferences.value.orderBy = SERVINGS_ON_HAND_SORT;
+      preferences.value.orderDirection = "desc";
+      preferences.value.filterNull = false;
+      preferences.value.sortIcon = $globals.icons.sortDescending;
       break;
     case EVENTS.shuffle:
       setter(

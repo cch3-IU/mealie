@@ -160,6 +160,29 @@ The recipe page had two buttons labeled "I Made This" (upstream's timeline dialo
 
 **Live-verified** at 1440×900 and 390×844 against a disposable copy of the sidecar's staging harness (own compose project name and ports 29925/29926, `nuxt dev` on 3100 with `API_URL` pointed at the gateway; torn down afterward, production stack untouched): the native dialog showed the section, submitting 12 servings created the lot and the counter and Daycare panel chip both read 12 with no reload; counter `+`/`-` moved both together (13, then 11); the Recipes page showed the badge only on the one recipe with inventory, with exactly one `GET /inventory` for the page load; stopping the sidecar container then submitting servings kept the timeline event and showed "Logged to the timeline, but inventory was not added…".
 
+### Phase F12 — "Servings on hand" recipe sort (captain request, 2026-09-23)
+
+A new entry in the recipe-list sort menus: recipes with servings on hand first (most servings first, ties by name), then every other recipe in the default order (`created_at desc`). Inventory lives in the sidecar, not Mealie's DB, so upstream `orderBy` can't express it; the list is assembled from two ordinary Mealie queries instead (no backend change):
+
+1. **Head (first page only):** in-stock slugs from the same shared `GET /inventory` the badges use, then the matching recipes fetched in batches of 40 (`slug IN [...]`, combined with the page's search/filters/`queryFilter`, so filters still apply), ordered by servings desc then name.
+2. **Tail:** the normal paginated `created_at desc` list with `slug NOT IN [<all in-stock slugs>]`, so nothing repeats across the boundary and infinite scroll just keeps paging the tail. The upstream component's `hasMore` checks subtract the head's length so the boundary doesn't end paging early.
+
+Choices and limits:
+- **Snapshot:** the in-stock slug set is fixed when page 1 (re)loads and reused for later pages, so a lot change mid-scroll can't shift the exclusion list and duplicate/drop recipes. Fresh numbers are read on every page-1 load (sort change, filter change, remount) — this also refreshes the badges' shared cache.
+- **Cap:** at most 100 in-stock recipes (highest counts) go in the head/exclusion list, keeping the `NOT IN` URL bounded; any beyond that fall into the normal order. Slugs that aren't `[\w-]+` are skipped (they are interpolated into the filter).
+- **The sort key `servings_on_hand` is UI-only.** It is remembered exactly like the other sorts (`recipe-section-preferences` localStorage, shared by the Recipes/search page and `RecipeCardSection`), but never sent to Mealie — the tail always asks for `created_at`. Every list built on `RecipeCardSection` (cookbooks, favorites) therefore handles a remembered sentinel too.
+- **Direction is fixed** (most servings first): the search page's "Sort Ascending/Descending" row is disabled while this sort is active; re-selecting the entry just refreshes.
+- **Sidecar offline / forbidden:** the list falls back to the default order and shows a small info alert ("Servings on hand isn't available right now…"); the stored choice is kept, so it works again on the next load once the sidecar is back. "Nothing on hand" is not an error — plain default order, no notice.
+- **Outside the user's own group** (public explore): no menu entry, no inventory read; a remembered sentinel silently means the default order.
+
+New files:
+- `frontend/app/composables/daycare/use-servings-on-hand-sort.ts` (+ `__tests__/use-servings-on-hand-sort.test.ts`) — `SERVINGS_ON_HAND_SORT`, `useServingsOnHandSort().fetchPage(fetchMore, {page, perPage, query, queryFilter})` → `{recipes, headCount}`, and `unavailable`; pure `rankOnHandSlugs`/`sortByServingsOnHand`. Tests: ordering, tie-break, no duplicates across head/tail through later pages, snapshot stability, filter combination, batching, offline (incl. throwing) + recovery, non-own-group, sentinel never sent as `orderBy`.
+- `frontend/app/components/Domain/Recipe/RecipeCardSection.test.ts` — component tests for the upstream wiring (remembered sentinel, infinite scroll, offline notice, menu entry + persistence, non-own-group, explorer-supplied `query.orderBy` + caller `queryFilter`).
+
+Edited overlay file: `frontend/app/composables/daycare/use-recipe-on-hand.ts` gains `loadOnHandCounts(fetchInventory, force)` and tracks whether the last read succeeded (the badges' cache used to swallow errors into `{}`, which can't tell "offline" from "nothing on hand"); badge behavior is unchanged.
+
+**Live-verified** at 1440×900 and 390×844 against a disposable copy of the sidecar's staging harness (own compose project `mealie-sortonhand-staging`, ports 39925/39926, `nuxt dev` on 3200; torn down afterward, production stack untouched), with 91 recipes and 4 in stock (12, 9, 4, 4): the Recipes-page menu offered the entry; picking it listed 12, 9, then the two 4s by name, then the rest newest-first; the requests were one `slug IN` batch, tail page 1 (64 items) and tail page 3 (32) with `NOT IN` of the four slugs, and scrolling to the end gave 91 unique cards; the favorites page (`RecipeCardSection`'s own menu path) put the in-stock favorites first from the remembered choice; stopping the sidecar container and reloading showed the notice with the default order (no badges, no errors) on desktop and phone; after restarting the container the notice was gone and the in-stock recipe showed under a restored search (the full in-stock-first order coming back after an outage is covered by the composable test "sidecar offline … recovers on the next load", not re-checked live). Type-checked with `vue-tsc` (no new errors in non-test source; test files are not type-clean project-wide). Not checked: dark theme, the cookbook page's own menu (same component as favorites), and >100 in-stock recipes.
+
 ## Modified upstream files
 
 ### Phase F10 — Inventory quick actions (captain request, 2026-09-23)
@@ -178,6 +201,16 @@ Every upstream edit is marked `OVERLAY(daycare)` in the source so it can be foun
 | `frontend/app/components/Domain/Recipe/RecipeLastMade.vue` | The native "I Made This" dialog: `DaycareMadeInventoryFields` inserted before the date row, `useMadeThisInventory` wired to the dialog's open state, one `await madeInventory.submit(...)` call after the timeline work, `:submit-disabled` on the dialog, and a `flex-column` wrapper around the button so `DaycareRecipeInventoryCounter` sits centered under it (that wrapper re-indents the existing `v-tooltip`/`v-btn` block — whitespace-only in `git diff -w`). |
 | `frontend/app/components/Domain/Recipe/RecipeCard.vue`, `RecipeCardMobile.vue` | One `<DaycareOnHandBadge :slug="slug" />` line + import each, so every card view (recipes page, search, cookbooks, suggestions, mealplan pickers that use these cards) shows the badge. |
 | `frontend/app/lang/messages/en-US.json` | New `daycare.inventory.*` keys; `make-this`/`make-this-title` reworded to "Add to Inventory". |
+
+### Phase F12 — "Servings on hand" sort (captain request, 2026-09-23)
+
+Every upstream edit is marked `OVERLAY(daycare)` in the source.
+
+| Upstream file | Reason |
+| --- | --- |
+| `frontend/app/components/Domain/Recipe/RecipeCardSection.vue` | Sort-menu entry (own-group only), `servingsOnHand` case in `sortRecipes`, the `SERVINGS_ON_HAND_SORT` branch in `fetchRecipes` (delegates to `useServingsOnHandSort`), `headCount` subtracted in the three `hasMore` length checks, and the fallback notice above the list. |
+| `frontend/app/components/Domain/Recipe/RecipeExplorerPage/RecipeExplorerPageParts/RecipeExplorerPageSearch.vue` | The Recipes/search page's own sort menu (`RecipeCardSection`'s is disabled there): one `sortable` entry (own-group only) and the direction row disabled while this sort is active. |
+| `frontend/app/lang/messages/en-US.json` | `daycare.inventory.sort-on-hand`, `sort-on-hand-unavailable`. |
 
 ### Phase 8 — Recipe-page Daycare panel (charter §7 Phase 8, §10, §3.3, §23.9)
 
