@@ -2,9 +2,10 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, test, vi } from "vitest";
 import RecipePageDaycarePanel from "./RecipePageDaycarePanel.vue";
 import { DaycareAPI } from "~/lib/api/user/daycare";
+import { toastAlert } from "~/composables/use-toast";
 import { vuetifyStubs } from "~/tests/stub-vuetify";
 import type { ApiRequestInstance } from "~/lib/api/types/non-generated";
-import type { InventoryResponse, PlannerSettings, ProcessingStatus, RecipeDaycare, WeekResponse } from "~/lib/api/types/daycare";
+import type { InventoryResponse, Lot, PlannerSettings, ProcessingStatus, RecipeDaycare, WeekResponse } from "~/lib/api/types/daycare";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -178,7 +179,7 @@ const VFormStub = {
 const BaseDialogStub = {
   props: { modelValue: Boolean, title: String, canSubmit: Boolean, canConfirm: Boolean, submitDisabled: Boolean, loading: Boolean },
   emits: ["submit", "confirm", "update:modelValue"],
-  template: "<div v-if=\"modelValue\"><div class=\"title\">{{ title }}</div><slot /></div>",
+  template: "<div v-if=\"modelValue\"><div class=\"title\">{{ title }}</div><slot /><button v-if=\"canSubmit\" class=\"submit\" :disabled=\"submitDisabled\" @click=\"$emit('submit')\">submit</button></div>",
 };
 
 function mountPanel() {
@@ -309,5 +310,77 @@ describe("RecipePageDaycarePanel", () => {
 
     expect(wrapper.find(".v-card").exists()).toBe(true);
     expect(wrapper.text()).toContain("hasn't been picked up by Daycare yet");
+  });
+
+  test("\"I made this\" renders and shows an on-hand count for an ordinary, unclassified recipe (not just daycare-eligible ones)", async () => {
+    const unclassifiedFixture: RecipeDaycare = { ...recipeDaycareFixture, classified: false, classification: null };
+    requests = createRequests(url => (url.endsWith("/daycare") ? Promise.resolve(apiResult(unclassifiedFixture)) : happyPathGet(url)));
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "I Made This");
+    expect(makeThisButton).toBeTruthy();
+    expect(wrapper.text()).toContain("4 on hand"); // physical prepared portions from the inventory fixture
+  });
+
+  test("\"I made this\" still renders when the recipe hasn't been picked up by the daycare sidecar at all (404 not-tracked)", async () => {
+    requests = createRequests(url => (url.endsWith("/daycare") ? Promise.resolve(apiError(404, "recipe_not_found")) : happyPathGet(url)));
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "I Made This");
+    expect(makeThisButton).toBeTruthy();
+  });
+
+  test("\"I made this\" creates a lot with a fresh Idempotency-Key and refreshes the on-hand count without a reload", async () => {
+    const createdLot: Lot = {
+      id: 42,
+      recipe_slug: "chicken-barley-soup",
+      portions_remaining: 3,
+      made_date: "2026-01-05",
+      use_by: null,
+      storage: "freezer",
+      notes: null,
+      created_at: "2026-01-05T00:00:00Z",
+      updated_at: "2026-01-05T00:00:00Z",
+    };
+    const updatedInventory: InventoryResponse = {
+      lots: [createdLot],
+      totals: { "chicken-barley-soup": { physical: 7, reserved: 1, free: 6 } },
+      summary: { lot_count: 1, physical: 7, reserved: 1, free: 6 },
+    };
+    let inventoryCalls = 0;
+    requests = createRequests((url) => {
+      if (url.endsWith("/inventory")) {
+        inventoryCalls += 1;
+        return Promise.resolve(apiResult(inventoryCalls === 1 ? inventoryFixture : updatedInventory));
+      }
+      return happyPathGet(url);
+    });
+    requests.post = vi.fn(url =>
+      url.endsWith("/inventory/lots")
+        ? Promise.resolve({ data: createdLot, error: null, response: null })
+        : Promise.resolve({ data: null, error: null, response: null }));
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("4 on hand");
+
+    const makeThisButton = wrapper.findAll("button").find(b => b.text() === "I Made This")!;
+    await makeThisButton.trigger("click");
+    const servingsInput = wrapper.find("input[type=\"number\"]");
+    await servingsInput.setValue("3");
+    await wrapper.find(".submit").trigger("click");
+    await flushPromises();
+
+    expect(requests.post).toHaveBeenCalledWith(
+      "/api/daycare/v1/inventory/lots",
+      expect.objectContaining({ recipe_slug: "chicken-barley-soup", portions: 3, storage: "freezer", use_by: null }),
+      expect.objectContaining({ headers: expect.objectContaining({ "Idempotency-Key": expect.stringMatching(UUID_RE) }) }),
+    );
+    expect(inventoryCalls).toEqual(2);
+    expect(wrapper.text()).toContain("7 on hand");
+    expect(toastAlert.open).toBe(true);
+    expect(toastAlert.text).toEqual("Added to inventory.");
   });
 });

@@ -3,6 +3,7 @@
     :model-value="modelValue"
     :title="$t('daycare.inventory.edit-lot-title')"
     :can-submit="true"
+    :can-delete="!unavailable"
     :keep-open="true"
     :loading="saving"
     :submit-text="$t('general.save')"
@@ -10,6 +11,7 @@
     :submit-disabled="!formValid"
     @update:model-value="$emit('update:modelValue', $event)"
     @submit="onSubmit"
+    @delete="onDelete"
   >
     <v-form>
       <v-text-field
@@ -59,12 +61,14 @@ interface Props {
   modelValue: boolean;
   lot: Lot | null;
   updateLot: (lotId: number, payload: LotPatch) => Promise<{ data: Lot | null; error: DaycareUiError | null }>;
+  deleteLot: (lotId: number) => Promise<{ data: Lot | null; error: DaycareUiError | null }>;
 }
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   "update:modelValue": [boolean];
   "saved": [Lot];
+  "deleted": [Lot];
 }>();
 
 const i18n = useI18n();
@@ -133,6 +137,30 @@ async function onSubmit() {
 
   if (result.data) {
     emit("saved", result.data);
+    emit("update:modelValue", false);
+    return;
+  }
+
+  if (result.error?.status === 404 || result.error?.status === 405) {
+    unavailable.value = true;
+    return;
+  }
+
+  errorState.value = result.error;
+}
+
+async function onDelete() {
+  if (!props.lot) return;
+
+  saving.value = true;
+  errorState.value = null;
+  unavailable.value = false;
+
+  const result = await props.deleteLot(props.lot.id);
+  saving.value = false;
+
+  if (result.data) {
+    emit("deleted", result.data);
     emit("update:modelValue", false);
     return;
   }

@@ -2,6 +2,8 @@ import { useUserApi } from "~/composables/api";
 import { useMealieAuth } from "~/composables/use-mealie-auth";
 import type {
   CompleteRequest,
+  LotConsumeRequest,
+  LotCreate,
   LotPatch,
   PlannerSettingsUpdate,
   PollRequest,
@@ -399,6 +401,30 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     );
   }
 
+  /** Creates a new inventory lot (e.g. from "I made this"), then refetches inventory so it shows up immediately. */
+  async function createLot(payload: LotCreate) {
+    return await runMutation(
+      () => api.daycare.createLot(payload),
+      () => inventory.load(),
+    );
+  }
+
+  /** Manual "eaten" take-off from one lot, then refetches inventory so the count updates immediately. */
+  async function consumeLot(lotId: number, payload: LotConsumeRequest) {
+    return await runMutation(
+      () => api.daycare.consumeLot(lotId, payload),
+      () => inventory.load(),
+    );
+  }
+
+  /** Deletes a lot outright, then refetches inventory so it disappears immediately. */
+  async function deleteLot(lotId: number) {
+    return await runMutation(
+      () => api.daycare.deleteLot(lotId),
+      () => inventory.load(),
+    );
+  }
+
   async function pollProcessing(payload?: PollRequest) {
     return await runMutation(
       () => api.daycare.pollProcessing(payload),
@@ -445,6 +471,9 @@ export function useDaycare(options: UseDaycareOptions = {}) {
     updateRecipeDaycare,
     updateSimpleFood,
     updateLot,
+    createLot,
+    consumeLot,
+    deleteLot,
     pollProcessing,
   };
 }

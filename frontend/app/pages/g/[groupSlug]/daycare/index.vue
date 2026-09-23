@@ -83,6 +83,8 @@
           :mutating="daycare.mutating.value"
           :offline="daycare.isOffline.value"
           :update-lot="daycare.updateLot"
+          :consume-lot="daycare.consumeLot"
+          :delete-lot="daycare.deleteLot"
         />
       </v-col>
       <v-col cols="12">

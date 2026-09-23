@@ -820,6 +820,8 @@ export interface LotPatch {
 
 export interface LotConsumeRequest {
   portions: number;
+  /** Lets a manual take-off cut into planner set-asides for future weeks. Not yet honored by every deployed sidecar. */
+  release_reservations?: boolean;
 }
 
 export interface LotConsumeResponse {
