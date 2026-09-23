@@ -61,10 +61,8 @@ export function useMadeThisInventory(slug: Ref<string>, dialogOpen: Ref<boolean>
       { portions: servings.value, made_date: madeDate, use_by: useBy.value, storage: storage.value },
       idempotencyKey,
     );
-    if (result.data) {
-      alert.success(i18n.t("daycare.inventory.make-this-success"));
-    }
-    else {
+    // No success toast: upstream's own "added to timeline" (or image-failure) toast must stay visible.
+    if (!result.data) {
       alert.error(i18n.t("daycare.inventory.made-this-not-added") + (result.error?.message ? ` (${result.error.message})` : ""));
     }
   }

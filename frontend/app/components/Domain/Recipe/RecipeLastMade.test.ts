@@ -120,22 +120,28 @@ describe("RecipeLastMade (native 'I Made This' dialog) inventory section", () =>
     vi.stubGlobal("useMealieAuth", () => ({ user: ref({ fullName: "Sam", householdSlug: "home" }) }));
   });
 
-  test("servings > 0 creates a lot after the timeline event, using the dialog's own date", async () => {
+  test("servings > 0 creates a lot after the timeline event, using the dialog's own (picked) date", async () => {
     const wrapper = mountLastMade();
     await openDialog(wrapper);
 
     await wrapper.find("input[type=\"number\"]").setValue("6");
+    // Two date pickers render: the inventory section's use-by (first), then upstream's made date (second).
+    const dateInputs = wrapper.findAll("input[type=\"date\"]");
+    expect(dateInputs).toHaveLength(2);
+    await dateInputs[0].setValue("2026-03-01");
+    await dateInputs[1].setValue("2026-01-05");
     await wrapper.find(".submit").trigger("click");
     await flushPromises();
 
     expect(createTimelineEvent).toHaveBeenCalledTimes(1);
     expect(requests.post).toHaveBeenCalledWith(
       "/api/daycare/v1/inventory/lots",
-      { recipe_slug: "chicken-barley-soup", portions: 6, made_date: localToday(), use_by: null, storage: "freezer" },
+      { recipe_slug: "chicken-barley-soup", portions: 6, made_date: "2026-01-05", use_by: "2026-03-01", storage: "freezer" },
       expect.objectContaining({ headers: expect.objectContaining({ "Idempotency-Key": expect.any(String) }) }),
     );
     expect(createTimelineEvent.mock.invocationCallOrder[0]).toBeLessThan((requests.post as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]);
-    expect(toastAlert.text).toEqual("Added to inventory.");
+    // upstream's toast survives; the overlay adds no success toast of its own
+    expect(toastAlert.text).toEqual("Added to timeline");
   });
 
   test("blank servings makes no inventory call at all", async () => {
