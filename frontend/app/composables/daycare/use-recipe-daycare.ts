@@ -5,6 +5,8 @@ import type {
   IngredientWritebackReceipt,
   IngredientWritebackUndoResult,
   InventoryResponse,
+  Lot,
+  LotCreate,
   PlanDay,
   ProcessingState,
   ProcessingStatus,
@@ -191,8 +193,8 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
       forbidden.value = true;
       return;
     }
-    if (kind) {
-      // Unreachable/offline/server/unknown — surfaced via recipeDaycare.error; skip the rest.
+    if (kind === "offline" || kind === "unreachable") {
+      // The sidecar itself is unreachable — inventory/processing/week would fail the same way.
       return;
     }
 
@@ -209,6 +211,31 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
   /** Refetches just the inventory resource, for a retry affordance when only that fetch failed. */
   async function retryInventory() {
     await fill(inventory, () => api.daycare.getInventory());
+  }
+
+  /**
+   * Creates a new inventory lot for this recipe (the "I made this" action) and refetches
+   * inventory so `preparedPortions` updates immediately, with no page reload. Works for any
+   * recipe, tracked by the daycare sidecar or not — the sidecar's `POST /inventory/lots` has
+   * no classification requirement. `idempotencyKey`, when passed, lets a caller resend the same
+   * key on retry so a repeat tap after a failed submit doesn't create a second lot.
+   */
+  async function createLot(payload: Omit<LotCreate, "recipe_slug">, idempotencyKey?: string): Promise<{ data: Lot | null; error: DaycareUiError | null }> {
+    mutating.value = true;
+    try {
+      const result = await api.daycare.createLot(
+        { ...payload, recipe_slug: slugValue() },
+        idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
+      );
+      if (result.data) {
+        await fill(inventory, () => api.daycare.getInventory());
+        return { data: result.data, error: null };
+      }
+      return { data: null, error: mapDaycareError(result.error) };
+    }
+    finally {
+      mutating.value = false;
+    }
   }
 
   async function updateRecipeDaycare(payload: RecipeDaycareUpdate) {
@@ -284,6 +311,7 @@ export function useRecipeDaycare(slug: Ref<string> | string) {
     processingNote,
     load,
     retryInventory,
+    createLot,
     updateRecipeDaycare,
     getIngredientWritebackPreview,
     applyIngredientWriteback,

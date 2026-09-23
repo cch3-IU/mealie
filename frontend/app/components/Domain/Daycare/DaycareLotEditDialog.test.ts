@@ -5,9 +5,9 @@ import { vuetifyStubs } from "~/tests/stub-vuetify";
 import type { Lot } from "~/lib/api/types/daycare";
 
 const BaseDialogStub = {
-  props: ["modelValue", "title", "canSubmit", "loading", "submitDisabled"],
-  emits: ["submit", "cancel", "update:modelValue"],
-  template: "<div v-if=\"modelValue\" class=\"dialog\"><slot /><button v-if=\"canSubmit\" class=\"submit\" :disabled=\"submitDisabled\" @click=\"$emit('submit')\">submit</button></div>",
+  props: ["modelValue", "title", "canSubmit", "canDelete", "loading", "submitDisabled"],
+  emits: ["submit", "cancel", "delete", "update:modelValue"],
+  template: "<div v-if=\"modelValue\" class=\"dialog\"><slot /><button v-if=\"canSubmit\" class=\"submit\" :disabled=\"submitDisabled\" @click=\"$emit('submit')\">submit</button><button v-if=\"canDelete\" class=\"delete\" @click=\"$emit('delete')\">delete</button></div>",
 };
 
 function lotFixture(overrides: Partial<Lot> = {}): Lot {
@@ -31,6 +31,7 @@ function mountDialog(props: Partial<InstanceType<typeof DaycareLotEditDialog>["$
       modelValue: true,
       lot: lotFixture(),
       updateLot: vi.fn(() => Promise.resolve({ data: null, error: null })),
+      deleteLot: vi.fn(() => Promise.resolve({ data: null, error: null })),
       ...props,
     },
     global: { stubs: { ...vuetifyStubs, BaseDialog: BaseDialogStub } },
@@ -172,6 +173,61 @@ describe("DaycareLotEditDialog", () => {
 
     expect(wrapper.text()).toContain("Enter a portions amount of 0 or more.");
     expect(wrapper.text()).not.toContain("Editing inventory isn't available yet");
+  });
+
+  test("deleting the lot calls deleteLot, emits deleted and closes on success", async () => {
+    const deletedLot = lotFixture();
+    const deleteLot = vi.fn(() => Promise.resolve({ data: deletedLot, error: null }));
+    const wrapper = mountDialog({ deleteLot });
+
+    await wrapper.find(".delete").trigger("click");
+    await flushPromises();
+
+    expect(deleteLot).toHaveBeenCalledWith(7);
+    expect(wrapper.emitted("deleted")?.[0]).toEqual([deletedLot]);
+    expect(wrapper.emitted("update:modelValue")?.at(-1)).toEqual([false]);
+  });
+
+  test("a 409 on delete (planned weeks still rely on it) renders the sidecar's message inline", async () => {
+    const deleteLot = vi.fn(() => Promise.resolve({
+      data: null,
+      error: { status: 409, code: "lot_reserved", message: "Can't delete: planned weeks still rely on this lot.", kind: "conflict" as const, details: null },
+    }));
+    const wrapper = mountDialog({ deleteLot });
+
+    await wrapper.find(".delete").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Can't delete: planned weeks still rely on this lot.");
+    expect(wrapper.emitted("deleted")).toBeUndefined();
+  });
+
+  test("a bare 404 on delete shows a lot-may-already-be-gone message, not the editing-unavailable message", async () => {
+    const deleteLot = vi.fn(() => Promise.resolve({
+      data: null,
+      error: { status: 404, code: null, message: null, kind: "not-found" as const, details: null },
+    }));
+    const wrapper = mountDialog({ deleteLot });
+
+    await wrapper.find(".delete").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("This lot may have already been removed");
+    expect(wrapper.text()).not.toContain("Editing inventory isn't available yet");
+    expect(wrapper.emitted("deleted")).toBeUndefined();
+  });
+
+  test("a bare 405 on delete also shows the lot-may-already-be-gone message", async () => {
+    const deleteLot = vi.fn(() => Promise.resolve({
+      data: null,
+      error: { status: 405, code: null, message: null, kind: "unknown" as const, details: null },
+    }));
+    const wrapper = mountDialog({ deleteLot });
+
+    await wrapper.find(".delete").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("This lot may have already been removed");
   });
 
   test("reopening the dialog resets a prior error state", async () => {

@@ -218,6 +218,33 @@ describe("DaycareAPI mutations attach a fresh Idempotency-Key", () => {
     expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
   });
 
+  test("createLot POSTs to the lots path with a UUID header", async () => {
+    const requests = createRequests();
+    const payload = { recipe_slug: "chicken-barley-soup", portions: 8, made_date: "2026-01-01", storage: "freezer" as const };
+    await new DaycareAPI(requests).createLot(payload);
+    const [url, body, config] = vi.mocked(requests.post).mock.calls[0];
+    expect(url).toEqual("/api/daycare/v1/inventory/lots");
+    expect(body).toEqual(payload);
+    expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
+  });
+
+  test("consumeLot posts to the lot's consume path with a UUID header", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).consumeLot(42, { portions: 1, release_reservations: true });
+    const [url, body, config] = vi.mocked(requests.post).mock.calls[0];
+    expect(url).toEqual("/api/daycare/v1/inventory/lots/42/consume");
+    expect(body).toEqual({ portions: 1, release_reservations: true });
+    expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
+  });
+
+  test("deleteLot DELETEs the lot path with a UUID header", async () => {
+    const requests = createRequests();
+    await new DaycareAPI(requests).deleteLot(42);
+    const [url, config] = vi.mocked(requests.delete).mock.calls[0];
+    expect(url).toEqual("/api/daycare/v1/inventory/lots/42");
+    expect(config?.headers?.["Idempotency-Key"]).toMatch(UUID_RE);
+  });
+
   test("applyIngredientWriteback and undoIngredientWriteback POST with an empty body and a UUID header", async () => {
     const requests = createRequests();
     const api = new DaycareAPI(requests);

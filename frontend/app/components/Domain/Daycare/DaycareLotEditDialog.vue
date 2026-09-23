@@ -3,6 +3,7 @@
     :model-value="modelValue"
     :title="$t('daycare.inventory.edit-lot-title')"
     :can-submit="true"
+    :can-delete="!unavailable"
     :keep-open="true"
     :loading="saving"
     :submit-text="$t('general.save')"
@@ -10,6 +11,7 @@
     :submit-disabled="!formValid"
     @update:model-value="$emit('update:modelValue', $event)"
     @submit="onSubmit"
+    @delete="onDelete"
   >
     <v-form>
       <v-text-field
@@ -44,6 +46,9 @@
       <p v-if="unavailable" class="text-medium-emphasis mt-2">
         {{ $t("daycare.inventory.edit-unavailable") }}
       </p>
+      <p v-else-if="deleteUnavailable" class="text-medium-emphasis mt-2">
+        {{ $t("daycare.inventory.delete-unavailable") }}
+      </p>
       <DaycareErrorState v-else-if="errorState" class="mt-2" :error="errorState" />
     </v-form>
   </BaseDialog>
@@ -59,12 +64,14 @@ interface Props {
   modelValue: boolean;
   lot: Lot | null;
   updateLot: (lotId: number, payload: LotPatch) => Promise<{ data: Lot | null; error: DaycareUiError | null }>;
+  deleteLot: (lotId: number) => Promise<{ data: Lot | null; error: DaycareUiError | null }>;
 }
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
   "update:modelValue": [boolean];
   "saved": [Lot];
+  "deleted": [Lot];
 }>();
 
 const i18n = useI18n();
@@ -75,6 +82,7 @@ const dateMenu = ref(false);
 const saving = ref(false);
 const errorState = ref<DaycareUiError | null>(null);
 const unavailable = ref(false);
+const deleteUnavailable = ref(false);
 
 const formValid = computed(() => typeof portions.value === "number" && Number.isFinite(portions.value) && portions.value >= 0);
 
@@ -98,6 +106,7 @@ function reset() {
   saving.value = false;
   errorState.value = null;
   unavailable.value = false;
+  deleteUnavailable.value = false;
   dateMenu.value = false;
 }
 
@@ -110,6 +119,7 @@ async function onSubmit() {
 
   if (!formValid.value) {
     unavailable.value = false;
+    deleteUnavailable.value = false;
     errorState.value = {
       status: null,
       code: null,
@@ -123,6 +133,7 @@ async function onSubmit() {
   saving.value = true;
   errorState.value = null;
   unavailable.value = false;
+  deleteUnavailable.value = false;
 
   const payload: LotPatch = {
     portions_remaining: portions.value!,
@@ -139,6 +150,31 @@ async function onSubmit() {
 
   if (result.error?.status === 404 || result.error?.status === 405) {
     unavailable.value = true;
+    return;
+  }
+
+  errorState.value = result.error;
+}
+
+async function onDelete() {
+  if (!props.lot) return;
+
+  saving.value = true;
+  errorState.value = null;
+  unavailable.value = false;
+  deleteUnavailable.value = false;
+
+  const result = await props.deleteLot(props.lot.id);
+  saving.value = false;
+
+  if (result.data) {
+    emit("deleted", result.data);
+    emit("update:modelValue", false);
+    return;
+  }
+
+  if (result.error?.status === 404 || result.error?.status === 405) {
+    deleteUnavailable.value = true;
     return;
   }
 

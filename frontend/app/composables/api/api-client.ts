@@ -48,8 +48,18 @@ function getRequests(axiosInstance: AxiosInstance): ApiRequestInstance {
       return await request.safe<T, U>(axiosInstance.patch, url, data, config);
     },
 
-    async delete<T>(url: string, config?: AxiosRequestConfig) {
-      return await request.safe<T, undefined>(axiosInstance.delete, url, undefined, config);
+    async delete<T>(url: string, config?: AxiosRequestConfig): Promise<RequestResponse<T>> {
+      // Unlike post/put/patch, axios's own `delete` takes (url, config) — no `data` argument.
+      // Routing it through `request.safe` (built for the 3-arg body methods) would shift `config`
+      // into the position axios reads as `data` and silently drop the real config (headers, etc.).
+      let error = null;
+      const response = await axiosInstance.delete<T>(url, config).catch((e) => {
+        error = e;
+      });
+      if (response != null) {
+        return { response, error, data: response?.data ?? null };
+      }
+      return { response: null, error, data: null };
     },
   };
 }

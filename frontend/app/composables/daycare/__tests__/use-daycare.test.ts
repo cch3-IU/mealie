@@ -22,6 +22,9 @@ const daycareApi = {
   unlockWeek: vi.fn(),
   updateSettings: vi.fn(),
   updateLot: vi.fn(),
+  createLot: vi.fn(),
+  consumeLot: vi.fn(),
+  deleteLot: vi.fn(),
 };
 
 let currentUser: { admin?: boolean } | null = { admin: false };
@@ -560,6 +563,73 @@ describe("useDaycare mutations", () => {
     expect(result.data).toBeNull();
     expect(result.error?.code).toEqual("lot_reserved");
     expect(result.error?.kind).toEqual("conflict");
+  });
+
+  test("createLot creates the lot then refetches inventory only", async () => {
+    resetMocks();
+    const createdLot = { id: 9, recipe_slug: "chicken-barley-soup", portions_remaining: 8, made_date: "2026-01-01", use_by: null, storage: "freezer", notes: null, created_at: "x", updated_at: "x" };
+    daycareApi.createLot.mockResolvedValue(ok(createdLot));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getInventory.mockClear();
+    daycareApi.getWeek.mockClear();
+
+    const result = await daycare.createLot({ recipe_slug: "chicken-barley-soup", portions: 8, made_date: "2026-01-01", storage: "freezer" });
+
+    expect(daycareApi.createLot).toHaveBeenCalledWith({ recipe_slug: "chicken-barley-soup", portions: 8, made_date: "2026-01-01", storage: "freezer" });
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(daycareApi.getWeek).not.toHaveBeenCalled();
+    expect(result.data).toEqual(createdLot);
+    expect(result.error).toBeNull();
+  });
+
+  test("consumeLot posts the take-off then refetches inventory only", async () => {
+    resetMocks();
+    const consumeResult = { lot_id: 7, recipe_slug: "chicken-barley-soup", portions: 1, portions_remaining: 3, lot: { id: 7, recipe_slug: "chicken-barley-soup", portions_remaining: 3, made_date: null, use_by: null, storage: "freezer", notes: null, created_at: "x", updated_at: "x" } };
+    daycareApi.consumeLot.mockResolvedValue(ok(consumeResult));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getInventory.mockClear();
+
+    const result = await daycare.consumeLot(7, { portions: 1, release_reservations: true });
+
+    expect(daycareApi.consumeLot).toHaveBeenCalledWith(7, { portions: 1, release_reservations: true });
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(result.data).toEqual(consumeResult);
+    expect(result.error).toBeNull();
+  });
+
+  test("consumeLot still refetches inventory and surfaces a mapped error on a 409 lot_reserved conflict", async () => {
+    resetMocks();
+    daycareApi.consumeLot.mockResolvedValue(httpError(409, "lot_reserved", "Requested amount exceeds what's free."));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getInventory.mockClear();
+
+    const result = await daycare.consumeLot(7, { portions: 1 });
+
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(result.data).toBeNull();
+    expect(result.error?.code).toEqual("lot_reserved");
+    expect(result.error?.kind).toEqual("conflict");
+  });
+
+  test("deleteLot deletes the lot then refetches inventory only", async () => {
+    resetMocks();
+    const deletedLot = { id: 7, recipe_slug: "chicken-barley-soup", portions_remaining: 0, made_date: null, use_by: null, storage: "freezer", notes: null, created_at: "x", updated_at: "x" };
+    daycareApi.deleteLot.mockResolvedValue(ok(deletedLot));
+    const daycare = useDaycare({ week: "2026-01-05" });
+    await daycare.refresh();
+    daycareApi.getInventory.mockClear();
+    daycareApi.getWeek.mockClear();
+
+    const result = await daycare.deleteLot(7);
+
+    expect(daycareApi.deleteLot).toHaveBeenCalledWith(7);
+    expect(daycareApi.getInventory).toHaveBeenCalledTimes(1);
+    expect(daycareApi.getWeek).not.toHaveBeenCalled();
+    expect(result.data).toEqual(deletedLot);
+    expect(result.error).toBeNull();
   });
 });
 

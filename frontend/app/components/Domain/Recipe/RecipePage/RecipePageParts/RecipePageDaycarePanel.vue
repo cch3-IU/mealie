@@ -1,8 +1,14 @@
 <template>
   <v-card v-if="show" flat class="mt-4 d-print-none" variant="outlined">
-    <v-card-title class="d-flex align-center py-2">
+    <v-card-title class="d-flex align-center flex-wrap py-2 ga-2">
       <span>{{ $t("daycare.recipe.title") }}</span>
+      <v-chip v-if="onHandCount !== null" size="small" variant="tonal">
+        {{ $t("daycare.inventory.on-hand", onHandCount) }}
+      </v-chip>
       <v-spacer />
+      <v-btn variant="text" size="small" :disabled="daycare.mutating.value" @click="makeThisOpen = true">
+        {{ $t("daycare.inventory.make-this") }}
+      </v-btn>
       <v-btn variant="text" size="small" @click="expanded = !expanded">
         {{ expanded ? $t("daycare.recipe.collapse") : $t("daycare.recipe.expand") }}
       </v-btn>
@@ -53,11 +59,18 @@
       :apply-writeback="daycare.applyIngredientWriteback"
       :undo-writeback="daycare.undoIngredientWriteback"
     />
+
+    <DaycareMakeThisDialog
+      v-model="makeThisOpen"
+      :create-lot="daycare.createLot"
+      @saved="onMade"
+    />
   </v-card>
 </template>
 
 <script setup lang="ts">
 import DaycareErrorState from "~/components/Domain/Daycare/DaycareErrorState.vue";
+import DaycareMakeThisDialog from "~/components/Domain/Daycare/DaycareMakeThisDialog.vue";
 import RecipeDaycareEditForm from "~/components/Domain/Daycare/RecipeDaycareEditForm.vue";
 import RecipeDaycareSummary from "~/components/Domain/Daycare/RecipeDaycareSummary.vue";
 import RecipeIngredientWritebackDialog from "~/components/Domain/Daycare/RecipeIngredientWritebackDialog.vue";
@@ -80,6 +93,7 @@ const expanded = ref(true);
  * immediately dumps a full form of switches/checkboxes onto the recipe page. */
 const editing = ref(false);
 const writebackDialogOpen = ref(false);
+const makeThisOpen = ref(false);
 
 /**
  * Rendered only once the initial fetch has settled and the caller isn't forbidden (a different
@@ -92,6 +106,15 @@ const show = computed(() =>
 );
 
 const record = computed(() => daycare.recipeDaycare.data.value);
+
+/** Shown in the header regardless of whether this recipe is tracked/classified by daycare, so
+ * "I made this" always has somewhere to reflect its effect — the detailed prepared-portions row
+ * further down only renders when a daycare record exists. Null (not 0) while inventory hasn't
+ * loaded or failed, so an unavailable count never reads as "none on hand". */
+const onHandCount = computed(() => {
+  if (daycare.inventory.error.value || !daycare.inventory.data.value) return null;
+  return daycare.preparedPortions.value?.physical ?? 0;
+});
 
 onMounted(() => {
   daycare.load();
@@ -106,5 +129,9 @@ async function onSave(payload: RecipeDaycareUpdate) {
     alert.success(i18n.t("daycare.recipe.saved"));
     editing.value = false;
   }
+}
+
+function onMade() {
+  alert.success(i18n.t("daycare.inventory.make-this-success"));
 }
 </script>

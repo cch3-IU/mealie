@@ -9,6 +9,9 @@ import type {
   IngredientWritebackUndoResult,
   InventoryResponse,
   Lot,
+  LotConsumeRequest,
+  LotConsumeResponse,
+  LotCreate,
   LotPatch,
   PlannerSettings,
   PlannerSettingsUpdate,
@@ -61,7 +64,9 @@ const routes = {
   weekShopping: (week: string) => `${prefix}/weeks/${week}/shopping`,
   weekShoppingPublish: (week: string) => `${prefix}/weeks/${week}/shopping/publish`,
   inventory: `${prefix}/inventory`,
+  lots: `${prefix}/inventory/lots`,
   lot: (lotId: number) => `${prefix}/inventory/lots/${lotId}`,
+  lotConsume: (lotId: number) => `${prefix}/inventory/lots/${lotId}/consume`,
   reservations: `${prefix}/reservations`,
   processing: `${prefix}/processing`,
   processingPoll: `${prefix}/processing/poll`,
@@ -263,6 +268,29 @@ export class DaycareAPI extends BaseAPI {
 
   async getInventory(config?: AxiosRequestConfig) {
     return await this.requests.get<InventoryResponse>(routes.inventory, undefined, config);
+  }
+
+  /** Creates a new inventory lot for a recipe — used by "I made this" on every recipe page, tracked or not. */
+  async createLot(payload: LotCreate, config?: AxiosRequestConfig) {
+    return await this.requests.post<Lot, LotCreate>(routes.lots, payload, withIdempotencyKey(config));
+  }
+
+  /**
+   * Consumes unreserved portions from one lot (a manual "eaten" take-off). A 409 `lot_reserved` means
+   * the requested amount exceeds what's free; pass `release_reservations: true` to let the take-off
+   * cut into planner set-asides instead. Not yet honored by every deployed sidecar.
+   */
+  async consumeLot(lotId: number, payload: LotConsumeRequest, config?: AxiosRequestConfig) {
+    return await this.requests.post<LotConsumeResponse, LotConsumeRequest>(
+      routes.lotConsume(lotId),
+      payload,
+      withIdempotencyKey(config),
+    );
+  }
+
+  /** Deletes a lot outright (e.g. correcting an accidental "I made this"). A 409 means planned weeks still rely on its portions. */
+  async deleteLot(lotId: number, config?: AxiosRequestConfig) {
+    return await this.requests.delete<Lot>(routes.lot(lotId), withIdempotencyKey(config));
   }
 
   /**
